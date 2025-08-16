@@ -19,8 +19,8 @@ import {
   SearchOutlined,
   ReloadOutlined,
   FilterOutlined,
-  TrendingUpOutlined,
-  TrendingDownOutlined,
+  RiseOutlined,
+  FallOutlined,
   FileTextOutlined
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
@@ -103,8 +103,8 @@ const News = () => {
   );
 
   const getSentimentIcon = (sentiment) => {
-    if (sentiment > 0.1) return <TrendingUpOutlined style={{ color: '#52c41a' }} />;
-    if (sentiment < -0.1) return <TrendingDownOutlined style={{ color: '#ff4d4f' }} />;
+    if (sentiment > 0.1) return <RiseOutlined style={{ color: '#52c41a' }} />;
+    if (sentiment < -0.1) return <FallOutlined style={{ color: '#ff4d4f' }} />;
     return <FileTextOutlined style={{ color: '#faad14' }} />;
   };
 
