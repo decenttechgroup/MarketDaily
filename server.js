@@ -15,6 +15,7 @@ const subscriptionsRoutes = require('./routes/subscriptions');
 const industriesRoutes = require('./routes/industries');
 const reportsRoutes = require('./routes/reports');
 const enhancedReportsRoutes = require('./routes/enhanced-reports');
+const openaiLogsRoutes = require('./routes/openai-logs');
 
 const NewsService = require('./services/NewsService');
 const EmailService = require('./services/EmailService');
@@ -22,6 +23,9 @@ const DatabaseService = require('./services/DatabaseService');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// 信任代理（解决 X-Forwarded-For 头部问题）
+app.set('trust proxy', true);
 
 // 中间件
 app.use(helmet());
@@ -49,6 +53,7 @@ app.use('/api/news', newsRoutes);
 app.use('/api/subscriptions', subscriptionsRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/enhanced-reports', enhancedReportsRoutes);
+app.use('/api/openai', openaiLogsRoutes);
 
 // 健康检查
 app.get('/api/health', (req, res) => {

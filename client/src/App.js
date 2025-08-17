@@ -8,6 +8,7 @@ import PortfolioManager from './components/PortfolioManager';
 import SubscriptionManager from './components/SubscriptionManager';
 import ReportCenter from './components/ReportCenter';
 import Settings from './components/Settings';
+import OpenAILogger from './components/OpenAILogger';
 import MainLayout from './components/Layout/MainLayout';
 
 const App = () => {
@@ -33,6 +34,7 @@ const App = () => {
         <Route path="/portfolio-manager" element={<PortfolioManager />} />
         <Route path="/subscriptions" element={<SubscriptionManager />} />
         <Route path="/news" element={<ReportCenter />} />
+        <Route path="/openai-logs" element={<OpenAILogger />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>

@@ -199,4 +199,93 @@ router.post('/batch', authenticateToken, async (req, res) => {
   }
 });
 
+// 测试OpenAI API连接
+router.post('/test-openai', authenticateToken, async (req, res) => {
+  try {
+    const { apiKey, model } = req.body;
+
+    if (!apiKey) {
+      return res.status(400).json({ error: 'API key is required' });
+    }
+
+    const { OpenAI } = require('openai');
+    
+    // 配置OpenAI客户端
+    const config = {
+      apiKey: apiKey,
+      timeout: 10000 // 10秒超时
+    };
+
+    // 如果设置了代理，使用代理配置
+    if (process.env.HTTP_PROXY || process.env.HTTPS_PROXY) {
+      try {
+        const { HttpsProxyAgent } = require('https-proxy-agent');
+        const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
+        config.httpAgent = new HttpsProxyAgent(proxyUrl);
+        console.log(`Testing OpenAI with proxy: ${proxyUrl}`);
+      } catch (error) {
+        console.warn('Failed to configure proxy for test:', error.message);
+      }
+    }
+
+    const openai = new OpenAI(config);
+    const OpenAILogger = require('../utils/OpenAILogger');
+    
+    // 测试聊天完成API
+    const params = {
+      model: model || 'gpt-3.5-turbo',
+      messages: [
+        {
+          role: 'user',
+          content: 'Hello! Please respond with "API connection successful" to confirm the connection is working.'
+        }
+      ],
+      max_tokens: 50,
+      temperature: 0
+    };
+
+    const response = await OpenAILogger.loggedOpenAICall(
+      openai, 
+      'config.test-openai', 
+      params, 
+      { 
+        service: 'config', 
+        operation: 'test-openai',
+        testUser: req.user.username || 'unknown'
+      }
+    );
+
+    const message = response.choices[0]?.message?.content || 'No response';
+    
+    res.json({ 
+      success: true, 
+      message: 'OpenAI API connection successful',
+      response: message,
+      model: response.model,
+      usage: response.usage
+    });
+  } catch (error) {
+    console.error('OpenAI test error:', error);
+    
+    let errorMessage = 'API connection failed';
+    let errorDetails = error.message;
+    
+    if (error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT') {
+      errorMessage = 'Network connection failed. Check your proxy settings if you are behind a firewall.';
+    } else if (error.status === 401) {
+      errorMessage = 'Invalid API key';
+    } else if (error.status === 429) {
+      errorMessage = 'API rate limit exceeded';
+    } else if (error.status === 400) {
+      errorMessage = 'Invalid request. Check if the model name is correct.';
+    }
+    
+    res.status(400).json({ 
+      success: false, 
+      error: errorMessage,
+      details: errorDetails
+    });
+  }
+});
+
 module.exports = router;

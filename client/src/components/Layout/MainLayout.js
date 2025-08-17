@@ -8,7 +8,8 @@ import {
   MailOutlined,
   SettingOutlined,
   UserOutlined,
-  LogoutOutlined
+  LogoutOutlined,
+  RobotOutlined
 } from '@ant-design/icons';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -39,6 +40,11 @@ const MainLayout = ({ children }) => {
       key: '/news',
       icon: <FileTextOutlined />,
       label: '报告中心'
+    },
+    {
+      key: '/openai-logs',
+      icon: <RobotOutlined />,
+      label: 'AI日志监控'
     },
     {
       key: '/settings',

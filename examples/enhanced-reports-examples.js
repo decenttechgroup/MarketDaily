@@ -81,7 +81,7 @@ async function example3_SendEnhancedPortfolioEmail() {
   try {
     console.log('\n=== 示例3：发送增强投资组合报告邮件 ===');
     
-    const emailService = new EmailService();
+    const emailService = EmailService;
     const portfolioId = 1;
     const recipients = ['investor1@example.com', 'investor2@example.com'];
     
@@ -115,7 +115,7 @@ async function example4_SendTopicResearchEmail() {
   try {
     console.log('\n=== 示例4：发送主题研究报告邮件 ===');
     
-    const emailService = new EmailService();
+    const emailService = EmailService;
     const topic = '新能源汽车';
     const days = 7;
     const recipients = ['analyst1@example.com', 'analyst2@example.com'];
@@ -141,7 +141,7 @@ async function example5_SendEnhancedDailyReport() {
   try {
     console.log('\n=== 示例5：批量发送增强版日报 ===');
     
-    const emailService = new EmailService();
+    const emailService = EmailService;
     
     // 发送增强版日报给所有订阅者
     const results = await emailService.sendDailyReport(true); // true 表示使用增强模式
@@ -162,7 +162,7 @@ async function example6_SendEnhancedReportToSubscribers() {
   try {
     console.log('\n=== 示例6：向投资组合订阅者发送增强报告 ===');
     
-    const emailService = new EmailService();
+    const emailService = EmailService;
     const portfolioId = 1;
     
     // 发送给该投资组合的所有订阅者
@@ -185,7 +185,7 @@ async function example7_SendTopicReportToSubscribers() {
   try {
     console.log('\n=== 示例7：向通用订阅者发送主题报告 ===');
     
-    const emailService = new EmailService();
+    const emailService = EmailService;
     const topic = '区块链技术';
     const days = 14;
     

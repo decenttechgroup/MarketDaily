@@ -2,12 +2,28 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const { OpenAI } = require('openai');
 const DatabaseService = require('./DatabaseService');
+const OpenAILogger = require('../utils/OpenAILogger');
 
 class NewsService {
   constructor() {
-    this.openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY
-    });
+    const config = {
+      apiKey: process.env.OPENAI_API_KEY,
+      timeout: 60000 // 60秒超时
+    };
+
+    // 如果设置了代理，使用代理配置
+    if (process.env.HTTP_PROXY || process.env.HTTPS_PROXY) {
+      try {
+        const { HttpsProxyAgent } = require('https-proxy-agent');
+        const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
+        config.httpAgent = new HttpsProxyAgent(proxyUrl);
+        console.log(`Using proxy: ${proxyUrl}`);
+      } catch (error) {
+        console.warn('Failed to configure proxy:', error.message);
+      }
+    }
+
+    this.openai = new OpenAI(config);
     
     this.newsSources = [
       {
@@ -213,7 +229,7 @@ class NewsService {
         return text.substring(0, 200) + '...';
       }
 
-      const response = await this.openai.chat.completions.create({
+      const params = {
         model: process.env.OPENAI_MODEL || 'gpt-3.5-turbo',
         messages: [
           {
@@ -227,7 +243,14 @@ class NewsService {
         ],
         max_tokens: 200,
         temperature: 0.3
-      });
+      };
+
+      const response = await OpenAILogger.loggedOpenAICall(
+        this.openai, 
+        'NewsService.generateSummary', 
+        params, 
+        { service: 'NewsService', operation: 'generateSummary' }
+      );
 
       return response.choices[0].message.content.trim();
     } catch (error) {
@@ -242,7 +265,7 @@ class NewsService {
         return 0;
       }
 
-      const response = await this.openai.chat.completions.create({
+      const params = {
         model: process.env.OPENAI_MODEL || 'gpt-3.5-turbo',
         messages: [
           {
@@ -256,7 +279,14 @@ class NewsService {
         ],
         max_tokens: 10,
         temperature: 0
-      });
+      };
+
+      const response = await OpenAILogger.loggedOpenAICall(
+        this.openai, 
+        'NewsService.analyzeSentiment', 
+        params, 
+        { service: 'NewsService', operation: 'analyzeSentiment' }
+      );
 
       const sentiment = parseFloat(response.choices[0].message.content.trim());
       return isNaN(sentiment) ? 0 : Math.max(-1, Math.min(1, sentiment));

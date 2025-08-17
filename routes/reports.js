@@ -62,11 +62,14 @@ router.get('/', authenticateToken, async (req, res) => {
 
     // 获取总数
     const totalResult = await DatabaseService.get(
-      `SELECT COUNT(DISTINCT DATE(sent_at), subject) as total 
-       FROM email_logs 
-       WHERE ${whereClause} 
-         AND status = 'sent'
-         AND subject LIKE '%报告%'`,
+      `SELECT COUNT(*) as total 
+       FROM (
+         SELECT DISTINCT DATE(sent_at), subject 
+         FROM email_logs 
+         WHERE ${whereClause} 
+           AND status = 'sent'
+           AND subject LIKE '%报告%'
+       )`,
       params
     );
 

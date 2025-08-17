@@ -350,10 +350,9 @@ router.get('/:id/report', authenticateToken, async (req, res) => {
     }
 
     const EmailService = require('../services/EmailService');
-    const emailService = new EmailService();
     
     // 如果指定了日期，生成历史报告，否则生成当前报告
-    const reportData = await emailService.generatePortfolioReport(id, date);
+    const reportData = await EmailService.generatePortfolioReport(id, date);
     
     res.json(reportData);
   } catch (error) {
@@ -394,16 +393,15 @@ router.post('/:id/send-report', authenticateToken, async (req, res) => {
     }
 
     const EmailService = require('../services/EmailService');
-    const emailService = new EmailService();
     
     // 生成报告
-    const reportData = await emailService.generatePortfolioReport(id, date);
+    const reportData = await EmailService.generatePortfolioReport(id, date);
     
     // 发送邮件
     const results = [];
     for (const email of emails) {
       try {
-        await emailService.sendPortfolioEmail(email, reportData, portfolio.name);
+        await EmailService.sendPortfolioEmail(email, reportData, portfolio.name);
         results.push({ email, status: 'sent' });
       } catch (error) {
         results.push({ email, status: 'failed', error: error.message });

@@ -19,7 +19,8 @@ import {
   DeleteOutlined,
   PlusOutlined,
   EditOutlined,
-  KeyOutlined
+  KeyOutlined,
+  ApiOutlined
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { useAuth } from '../contexts/AuthContext';
@@ -36,6 +37,7 @@ const Settings = () => {
   const [industryForm] = Form.useForm();
   const [isIndustryModalVisible, setIsIndustryModalVisible] = useState(false);
   const [editingIndustry, setEditingIndustry] = useState(null);
+  const [testingOpenAI, setTestingOpenAI] = useState(false);
   const { user, changePassword } = useAuth();
   const queryClient = useQueryClient();
 
@@ -111,6 +113,23 @@ const Settings = () => {
     }
   );
 
+  // 测试OpenAI API
+  const testOpenAIMutation = useMutation(
+    (data) => axios.post('/api/config/test-openai', data),
+    {
+      onSuccess: (response) => {
+        message.success(`API连接成功! 模型: ${response.data.model}`);
+        console.log('OpenAI Test Response:', response.data);
+      },
+      onError: (error) => {
+        const errorMsg = error.response?.data?.error || 'API测试失败';
+        const errorDetails = error.response?.data?.details;
+        message.error(`${errorMsg}${errorDetails ? ': ' + errorDetails : ''}`);
+        console.error('OpenAI Test Error:', error.response?.data);
+      }
+    }
+  );
+
   const handleSaveConfig = () => {
     configForm.validateFields().then((values) => {
       saveConfigMutation.mutate(values);
@@ -149,6 +168,30 @@ const Settings = () => {
         id: editingIndustry?.id
       };
       saveIndustryMutation.mutate(data);
+    });
+  };
+
+  const handleTestOpenAI = () => {
+    configForm.validateFields(['openai_api_key', 'openai_model']).then((values) => {
+      const { openai_api_key, openai_model } = values;
+      if (!openai_api_key) {
+        message.error('请先填写OpenAI API Key');
+        return;
+      }
+      setTestingOpenAI(true);
+      testOpenAIMutation.mutate(
+        { 
+          apiKey: openai_api_key, 
+          model: openai_model || 'gpt-3.5-turbo' 
+        },
+        {
+          onSettled: () => {
+            setTestingOpenAI(false);
+          }
+        }
+      );
+    }).catch(() => {
+      message.error('请填写完整的OpenAI配置信息');
     });
   };
 
@@ -250,7 +293,24 @@ const Settings = () => {
                 <Option value="gpt-3.5-turbo">GPT-3.5 Turbo</Option>
                 <Option value="gpt-4">GPT-4</Option>
                 <Option value="gpt-4-turbo">GPT-4 Turbo</Option>
+                <Option value="gpt-4o">GPT-4o</Option>
+                <Option value="gpt-4o-mini">GPT-4o Mini</Option>
               </Select>
+            </Form.Item>
+
+            <Form.Item>
+              <Button
+                type="default"
+                icon={<ApiOutlined />}
+                onClick={handleTestOpenAI}
+                loading={testingOpenAI}
+                style={{ marginBottom: '16px' }}
+              >
+                测试API连接
+              </Button>
+              <div style={{ fontSize: '12px', color: '#666', marginTop: '8px' }}>
+                点击测试按钮验证API密钥和模型配置是否正确
+              </div>
             </Form.Item>
           </div>
 

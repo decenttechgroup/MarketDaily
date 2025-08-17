@@ -3,12 +3,28 @@ const { format } = require('date-fns');
 const DatabaseService = require('./DatabaseService');
 const NewsService = require('./NewsService');
 const axios = require('axios');
+const OpenAILogger = require('../utils/OpenAILogger');
 
 class ReportService {
   constructor() {
-    this.openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY
-    });
+    const config = {
+      apiKey: process.env.OPENAI_API_KEY,
+      timeout: 60000 // 60秒超时
+    };
+
+    // 如果设置了代理，使用代理配置
+    if (process.env.HTTP_PROXY || process.env.HTTPS_PROXY) {
+      try {
+        const { HttpsProxyAgent } = require('https-proxy-agent');
+        const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
+        config.httpAgent = new HttpsProxyAgent(proxyUrl);
+        console.log(`Using proxy: ${proxyUrl}`);
+      } catch (error) {
+        console.warn('Failed to configure proxy:', error.message);
+      }
+    }
+
+    this.openai = new OpenAI(config);
     
     // 支持多个搜索API
     this.searchAPIs = {
@@ -274,7 +290,7 @@ class ReportService {
         `${news.title}: ${news.summary || '无摘要'}`
       ).join('\n');
 
-      const response = await this.openai.chat.completions.create({
+      const params = {
         model: process.env.OPENAI_MODEL || 'gpt-3.5-turbo',
         messages: [
           {
@@ -292,7 +308,19 @@ class ReportService {
         ],
         max_tokens: 500,
         temperature: 0.3
-      });
+      };
+
+      const response = await OpenAILogger.loggedOpenAICall(
+        this.openai, 
+        'ReportService.generateAIAnalysis', 
+        params, 
+        { 
+          service: 'ReportService', 
+          operation: 'generateAIAnalysis',
+          newsCount: allNews.length,
+          portfolioNewsCount: portfolioNews.length
+        }
+      );
 
       const result = JSON.parse(response.choices[0].message.content);
       return result;
@@ -354,7 +382,7 @@ class ReportService {
         `${item.title}: ${item.summary || '无摘要'}`
       ).join('\n');
 
-      const response = await this.openai.chat.completions.create({
+      const params = {
         model: process.env.OPENAI_MODEL || 'gpt-3.5-turbo',
         messages: [
           {
@@ -372,7 +400,19 @@ class ReportService {
         ],
         max_tokens: 400,
         temperature: 0.3
-      });
+      };
+
+      const response = await OpenAILogger.loggedOpenAICall(
+        this.openai, 
+        'ReportService.generatePortfolioRecommendations', 
+        params, 
+        { 
+          service: 'ReportService', 
+          operation: 'generatePortfolioRecommendations',
+          stockCount: stocks.length,
+          newsCount: news.length
+        }
+      );
 
       const result = JSON.parse(response.choices[0].message.content);
       return result;
@@ -508,7 +548,7 @@ class ReportService {
 
       const newsText = news.slice(0, 8).map(item => item.title).join('\n');
 
-      const response = await this.openai.chat.completions.create({
+      const params = {
         model: process.env.OPENAI_MODEL || 'gpt-3.5-turbo',
         messages: [
           {
@@ -522,7 +562,18 @@ class ReportService {
         ],
         max_tokens: 300,
         temperature: 0.3
-      });
+      };
+
+      const response = await OpenAILogger.loggedOpenAICall(
+        this.openai, 
+        'ReportService.generateMarketOverview', 
+        params, 
+        { 
+          service: 'ReportService', 
+          operation: 'generateMarketOverview',
+          newsCount: news.length
+        }
+      );
 
       return response.choices[0].message.content.trim();
     } catch (error) {
@@ -670,7 +721,7 @@ class ReportService {
         `${item.title}: ${item.summary || '无摘要'}`
       ).join('\n');
 
-      const response = await this.openai.chat.completions.create({
+      const params = {
         model: process.env.OPENAI_MODEL || 'gpt-3.5-turbo',
         messages: [
           {
@@ -684,7 +735,18 @@ class ReportService {
         ],
         max_tokens: 250,
         temperature: 0.3
-      });
+      };
+
+      const response = await OpenAILogger.loggedOpenAICall(
+        this.openai, 
+        'ReportService.generateTopicAnalysis', 
+        params, 
+        { 
+          service: 'ReportService', 
+          operation: 'generateTopicAnalysis',
+          topic: topic 
+        }
+      );
 
       return response.choices[0].message.content.trim();
     } catch (error) {
@@ -783,7 +845,7 @@ class ReportService {
         `${item.title}: ${item.summary || '无摘要'}`
       ).join('\n');
 
-      const response = await this.openai.chat.completions.create({
+      const params = {
         model: process.env.OPENAI_MODEL || 'gpt-3.5-turbo',
         messages: [
           {
@@ -802,7 +864,18 @@ class ReportService {
         ],
         max_tokens: 600,
         temperature: 0.3
-      });
+      };
+
+      const response = await OpenAILogger.loggedOpenAICall(
+        this.openai, 
+        'ReportService.analyzeExternalNews', 
+        params, 
+        { 
+          service: 'ReportService', 
+          operation: 'analyzeExternalNews',
+          newsCount: news.length 
+        }
+      );
 
       const result = JSON.parse(response.choices[0].message.content);
       return result;
@@ -971,7 +1044,7 @@ class ReportService {
         `[${item.external ? '外部' : '内部'}] ${item.title}: ${item.summary || '无摘要'}`
       ).join('\n');
 
-      const response = await this.openai.chat.completions.create({
+      const params = {
         model: process.env.OPENAI_MODEL || 'gpt-3.5-turbo',
         messages: [
           {
@@ -991,7 +1064,19 @@ class ReportService {
         ],
         max_tokens: 800,
         temperature: 0.3
-      });
+      };
+
+      const response = await OpenAILogger.loggedOpenAICall(
+        this.openai, 
+        'ReportService.generateEnhancedAIAnalysis', 
+        params, 
+        { 
+          service: 'ReportService', 
+          operation: 'generateEnhancedAIAnalysis',
+          stockCount: stocks.length,
+          newsCount: news.length 
+        }
+      );
 
       const result = JSON.parse(response.choices[0].message.content);
       return result;
@@ -1085,7 +1170,7 @@ class ReportService {
         `[${item.external ? '外部' : '内部'}] ${item.title}: ${item.summary || '无摘要'}`
       ).join('\n');
 
-      const response = await this.openai.chat.completions.create({
+      const params = {
         model: process.env.OPENAI_MODEL || 'gpt-3.5-turbo',
         messages: [
           {
@@ -1106,7 +1191,19 @@ class ReportService {
         ],
         max_tokens: 1000,
         temperature: 0.3
-      });
+      };
+
+      const response = await OpenAILogger.loggedOpenAICall(
+        this.openai, 
+        'ReportService.generateTopicDeepAnalysis', 
+        params, 
+        { 
+          service: 'ReportService', 
+          operation: 'generateTopicDeepAnalysis',
+          topic: topic,
+          newsCount: news.length 
+        }
+      );
 
       const result = JSON.parse(response.choices[0].message.content);
       return result;
