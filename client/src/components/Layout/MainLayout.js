@@ -38,7 +38,7 @@ const MainLayout = ({ children }) => {
     {
       key: '/news',
       icon: <FileTextOutlined />,
-      label: '新闻资讯'
+      label: '报告中心'
     },
     {
       key: '/settings',

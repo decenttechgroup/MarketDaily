@@ -13,6 +13,8 @@ const portfoliosRoutes = require('./routes/portfolios');
 const newsRoutes = require('./routes/news');
 const subscriptionsRoutes = require('./routes/subscriptions');
 const industriesRoutes = require('./routes/industries');
+const reportsRoutes = require('./routes/reports');
+const enhancedReportsRoutes = require('./routes/enhanced-reports');
 
 const NewsService = require('./services/NewsService');
 const EmailService = require('./services/EmailService');
@@ -45,6 +47,8 @@ app.use('/api/portfolio', portfolioRoutes);
 app.use('/api/portfolios', portfoliosRoutes);
 app.use('/api/news', newsRoutes);
 app.use('/api/subscriptions', subscriptionsRoutes);
+app.use('/api/reports', reportsRoutes);
+app.use('/api/enhanced-reports', enhancedReportsRoutes);
 
 // 健康检查
 app.get('/api/health', (req, res) => {
