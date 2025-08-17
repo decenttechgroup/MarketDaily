@@ -20,6 +20,7 @@ import {
   MailOutlined,
   RocketOutlined
 } from '@ant-design/icons';
+import { useQueryClient } from 'react-query';
 import axios from 'axios';
 
 const { Title, Text } = Typography;
@@ -29,6 +30,7 @@ const EnhancedReportsManager = () => {
   const [loading, setLoading] = useState(false);
   const [previewData, setPreviewData] = useState(null);
   const [activeTab, setActiveTab] = useState('enhanced-portfolio');
+  const queryClient = useQueryClient();
 
   // 发送增强投资组合报告
   const handleSendEnhancedPortfolioReport = async (values) => {
@@ -42,6 +44,9 @@ const EnhancedReportsManager = () => {
       });
       
       message.success(`增强投资组合报告发送成功！发送至 ${response.data.sent} 个邮箱`);
+      
+      // 刷新报告列表
+      queryClient.invalidateQueries('reports');
     } catch (error) {
       message.error(error.response?.data?.error || '发送失败');
     } finally {
@@ -61,6 +66,9 @@ const EnhancedReportsManager = () => {
       });
       
       message.success(`主题研究报告发送成功！发送至 ${response.data.sent} 个邮箱`);
+      
+      // 刷新报告列表
+      queryClient.invalidateQueries('reports');
     } catch (error) {
       message.error(error.response?.data?.error || '发送失败');
     } finally {
@@ -79,6 +87,9 @@ const EnhancedReportsManager = () => {
       
       setPreviewData(response.data.data);
       message.success('报告预览生成成功');
+      
+      // 刷新报告列表，因为预览也会创建报告记录
+      queryClient.invalidateQueries('reports');
     } catch (error) {
       message.error(error.response?.data?.error || '预览生成失败');
     } finally {
@@ -96,6 +107,9 @@ const EnhancedReportsManager = () => {
       
       setPreviewData(response.data.data);
       message.success('主题报告预览生成成功');
+      
+      // 刷新报告列表，因为预览也会创建报告记录
+      queryClient.invalidateQueries('reports');
     } catch (error) {
       message.error(error.response?.data?.error || '预览生成失败');
     } finally {

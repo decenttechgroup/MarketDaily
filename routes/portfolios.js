@@ -354,7 +354,20 @@ router.get('/:id/report', authenticateToken, async (req, res) => {
     // 如果指定了日期，生成历史报告，否则生成当前报告
     const reportData = await EmailService.generatePortfolioReport(id, date);
     
-    res.json(reportData);
+    // 保存报告记录到数据库
+    const reportId = await DatabaseService.saveReport({
+      type: 'portfolio',
+      title: `投资组合报告 - ${portfolio.name}`,
+      portfolioId: parseInt(id),
+      userId: req.user.id,
+      data: reportData,
+      status: 'generated'
+    });
+    
+    res.json({
+      ...reportData,
+      reportId
+    });
   } catch (error) {
     console.error('Generate portfolio report error:', error);
     res.status(500).json({ error: 'Internal server error' });

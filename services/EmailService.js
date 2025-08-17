@@ -71,9 +71,38 @@ class EmailService {
             ? await ReportService.generateEnhancedPortfolioReport(portfolioId)
             : await ReportService.generatePortfolioReport(portfolioId);
           
+          // 保存报告到数据库
+          const reportType = useEnhanced ? 'enhanced-portfolio' : 'portfolio';
+          const reportTitle = useEnhanced 
+            ? `增强投资组合报告 - ${data.portfolio_name}`
+            : `投资组合报告 - ${data.portfolio_name}`;
+            
+          const reportId = await DatabaseService.saveReport({
+            type: reportType,
+            title: reportTitle,
+            portfolioId: parseInt(portfolioId),
+            userId: null, // 系统生成的报告
+            data: reportData,
+            status: 'generated'
+          });
+          
+          let successCount = 0;
           for (const email of data.emails) {
-            await this.sendPortfolioEmail(email, reportData, data.portfolio_name);
+            try {
+              await this.sendPortfolioEmail(email, reportData, data.portfolio_name);
+              successCount++;
+            } catch (emailError) {
+              console.error(`Failed to send report to ${email}:`, emailError);
+            }
           }
+          
+          // 更新报告状态
+          const finalStatus = successCount > 0 ? 'sent' : 'failed';
+          await DatabaseService.run(
+            'UPDATE reports SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+            [finalStatus, reportId]
+          );
+          
         } catch (error) {
           console.error(`Error generating portfolio report for ${portfolioId}:`, error);
           // 发送错误通知给管理员
@@ -86,9 +115,33 @@ class EmailService {
         try {
           const reportData = await ReportService.generateGeneralReport();
           
+          // 保存通用报告到数据库
+          const reportId = await DatabaseService.saveReport({
+            type: 'general',
+            title: '综合市场报告',
+            portfolioId: null,
+            userId: null, // 系统生成的报告
+            data: reportData,
+            status: 'generated'
+          });
+          
+          let successCount = 0;
           for (const email of generalSubscriptions) {
-            await this.sendEmail(email, reportData);
+            try {
+              await this.sendEmail(email, reportData);
+              successCount++;
+            } catch (emailError) {
+              console.error(`Failed to send general report to ${email}:`, emailError);
+            }
           }
+          
+          // 更新报告状态
+          const finalStatus = successCount > 0 ? 'sent' : 'failed';
+          await DatabaseService.run(
+            'UPDATE reports SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+            [finalStatus, reportId]
+          );
+          
         } catch (error) {
           console.error('Error generating general report:', error);
           // 发送错误通知给管理员
@@ -868,7 +921,12 @@ class EmailService {
       }
 
       console.log(`Topic research report sent to ${recipients.length} recipients`);
-      return results;
+      
+      // 返回结果和报告数据
+      return {
+        results,
+        reportData
+      };
     } catch (error) {
       console.error('Error sending topic research report:', error);
       throw error;
@@ -922,7 +980,12 @@ class EmailService {
       }
 
       console.log(`Enhanced portfolio report sent to ${recipients.length} recipients`);
-      return results;
+      
+      // 返回结果和报告数据
+      return {
+        results,
+        reportData
+      };
     } catch (error) {
       console.error('Error sending enhanced portfolio report:', error);
       throw error;
@@ -1276,17 +1339,18 @@ class EmailService {
       }
 
       const emails = subscriptions.map(sub => sub.email);
-      const results = await this.sendEnhancedPortfolioReport(portfolioId, emails, targetDate);
+      const result = await this.sendEnhancedPortfolioReport(portfolioId, emails, targetDate);
       
-      const successCount = results.filter(r => r.status === 'sent').length;
-      const failedCount = results.filter(r => r.status === 'failed').length;
+      const successCount = result.results.filter(r => r.status === 'sent').length;
+      const failedCount = result.results.filter(r => r.status === 'failed').length;
       
       console.log(`Enhanced portfolio report sent to ${successCount}/${emails.length} subscribers`);
       return { 
         sent: successCount, 
         failed: failedCount, 
         total: emails.length,
-        portfolioName: subscriptions[0]?.portfolio_name 
+        portfolioName: subscriptions[0]?.portfolio_name,
+        reportData: result.reportData
       };
     } catch (error) {
       console.error('Error sending enhanced report to subscribers:', error);

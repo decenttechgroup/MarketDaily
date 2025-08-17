@@ -46,7 +46,7 @@ const ReportCenter = () => {
   const queryClient = useQueryClient();
 
   // 获取报告列表
-  const { data: reportsData, isLoading: reportsLoading } = useQuery(
+  const { data: reportsData, isLoading: reportsLoading, refetch: refetchReports } = useQuery(
     ['reports', currentPage, selectedPortfolio, selectedDate],
     () => {
       const params = {
@@ -65,7 +65,10 @@ const ReportCenter = () => {
       
       return axios.get('/api/reports', { params }).then(res => res.data);
     },
-    { keepPreviousData: true }
+    { 
+      keepPreviousData: true,
+      refetchInterval: 30000 // 每30秒自动刷新
+    }
   );
 
   // 获取投资组合列表
@@ -99,18 +102,34 @@ const ReportCenter = () => {
   const reportColumns = [
     {
       title: '报告日期',
-      dataIndex: 'report_date',
-      key: 'report_date',
+      dataIndex: 'created_at',
+      key: 'created_at',
       width: '15%',
       render: (date) => (
         <Space direction="vertical" size={0}>
           <Text strong>{dayjs(date).format('YYYY-MM-DD')}</Text>
           <Text type="secondary" style={{ fontSize: '12px' }}>
-            {dayjs(date).format('dddd')}
+            {dayjs(date).format('HH:mm')}
           </Text>
         </Space>
       ),
-      sorter: (a, b) => dayjs(a.report_date).unix() - dayjs(b.report_date).unix()
+      sorter: (a, b) => dayjs(a.created_at).unix() - dayjs(b.created_at).unix()
+    },
+    {
+      title: '报告类型',
+      dataIndex: 'type',
+      key: 'type',
+      width: '15%',
+      render: (type) => {
+        const typeMap = {
+          'portfolio': { color: 'blue', text: '投资组合' },
+          'enhanced-portfolio': { color: 'purple', text: '增强投资组合' },
+          'topic-research': { color: 'green', text: '主题研究' },
+          'general': { color: 'orange', text: '综合报告' }
+        };
+        const config = typeMap[type] || { color: 'default', text: type };
+        return <Tag color={config.color}>{config.text}</Tag>;
+      }
     },
     {
       title: '投资组合',
@@ -120,60 +139,75 @@ const ReportCenter = () => {
       render: (name, record) => (
         <Space>
           <Avatar size="small" style={{ backgroundColor: '#1890ff' }}>
-            {name ? name.charAt(0) : 'G'}
+            {name ? name.charAt(0) : (record.topic ? 'T' : 'G')}
           </Avatar>
           <Space direction="vertical" size={0}>
-            <Text strong>{name || '综合日报'}</Text>
-            {record.is_public && (
-              <Tag size="small" color="green">公开</Tag>
+            <Text strong>{name || record.topic || '通用报告'}</Text>
+            {record.days && (
+              <Text type="secondary" style={{ fontSize: '12px' }}>
+                {record.days}天数据
+              </Text>
             )}
           </Space>
         </Space>
       )
     },
     {
-      title: '报告主题',
-      dataIndex: 'subject',
-      key: 'subject',
+      title: '报告标题',
+      dataIndex: 'title',
+      key: 'title',
       width: '25%',
       ellipsis: true,
-      render: (subject) => (
-        <Tooltip title={subject}>
-          <Text>{subject}</Text>
+      render: (title) => (
+        <Tooltip title={title}>
+          <Text>{title}</Text>
         </Tooltip>
       )
     },
     {
-      title: '发送数量',
-      dataIndex: 'recipient_count',
-      key: 'recipient_count',
-      width: '10%',
-      render: (count) => (
-        <Statistic 
-          value={count} 
-          suffix="份"
-          valueStyle={{ fontSize: '14px' }}
-        />
-      ),
-      sorter: (a, b) => a.recipient_count - b.recipient_count
+      title: '数据概览',
+      key: 'summary',
+      width: '15%',
+      render: (_, record) => {
+        const summary = record.summary || {};
+        return (
+          <Space direction="vertical" size={0}>
+            {summary.totalNews && (
+              <Text style={{ fontSize: '12px' }}>
+                📰 {summary.totalNews} 条新闻
+              </Text>
+            )}
+            {summary.stockCount && (
+              <Text style={{ fontSize: '12px' }}>
+                📈 {summary.stockCount} 只股票
+              </Text>
+            )}
+            {summary.marketSentiment !== undefined && (
+              <Text style={{ fontSize: '12px' }}>
+                😊 情绪: {summary.marketSentiment > 0 ? '乐观' : summary.marketSentiment < 0 ? '谨慎' : '中性'}
+              </Text>
+            )}
+          </Space>
+        );
+      }
     },
     {
-      title: '发送状态',
+      title: '状态',
       dataIndex: 'status',
       key: 'status',
       width: '10%',
-      render: (status) => (
-        <Tag color={status === 'sent' ? 'green' : status === 'failed' ? 'red' : 'orange'}>
-          {status === 'sent' ? '已发送' : status === 'failed' ? '发送失败' : '待发送'}
-        </Tag>
+      render: (status, record) => (
+        <Space direction="vertical" size={0}>
+          <Tag color={status === 'sent' ? 'green' : status === 'generated' ? 'blue' : 'red'}>
+            {status === 'sent' ? '已发送' : status === 'generated' ? '已生成' : '失败'}
+          </Tag>
+          {record.email_sent && (
+            <Tag size="small" color="orange">
+              <MailOutlined /> 已邮件
+            </Tag>
+          )}
+        </Space>
       )
-    },
-    {
-      title: '发送时间',
-      dataIndex: 'sent_at',
-      key: 'sent_at',
-      width: '15%',
-      render: (time) => dayjs(time).format('MM-DD HH:mm')
     },
     {
       title: '操作',

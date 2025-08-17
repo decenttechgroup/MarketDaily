@@ -8,102 +8,117 @@ const router = express.Router();
 // 获取所有投资组合报告列表
 router.get('/', authenticateToken, async (req, res) => {
   try {
-    const { page = 1, limit = 20, portfolio_id, date_from, date_to } = req.query;
-    const offset = (page - 1) * limit;
+    const { page = 1, limit = 20, portfolio_id, date_from, date_to, type } = req.query;
     
-    let whereClause = '1=1';
-    const params = [];
+    // 使用新的报告表获取报告列表
+    const options = {
+      page: parseInt(page),
+      limit: parseInt(limit),
+      portfolioId: portfolio_id,
+      type,
+      dateFrom: date_from,
+      dateTo: date_to
+    };
 
-    // 如果指定了投资组合ID
-    if (portfolio_id && portfolio_id !== 'all') {
-      // 获取投资组合名称
-      const portfolio = await DatabaseService.get(
-        'SELECT name FROM portfolios WHERE id = ?',
-        [portfolio_id]
+    const result = await DatabaseService.getUserReports(req.user.id, options);
+
+    // 为每个报告添加额外信息
+    for (const report of result.reports) {
+      // 检查是否已发送过邮件
+      const emailSent = await DatabaseService.get(
+        `SELECT COUNT(*) as count FROM email_logs 
+         WHERE subject LIKE ? AND status = 'sent'`,
+        [`%${report.title}%`]
       );
       
-      if (portfolio) {
-        whereClause += ' AND el.subject LIKE ?';
-        params.push(`%${portfolio.name}%`);
-      }
-    }
-
-    // 日期范围过滤
-    if (date_from) {
-      whereClause += ' AND DATE(el.sent_at) >= ?';
-      params.push(date_from);
-    }
-
-    if (date_to) {
-      whereClause += ' AND DATE(el.sent_at) <= ?';
-      params.push(date_to);
-    }
-
-    // 获取报告列表（基于邮件发送记录）
-    const reports = await DatabaseService.all(
-      `SELECT 
-        el.id,
-        el.subject,
-        el.recipient,
-        el.status,
-        el.sent_at,
-        el.error_message,
-        DATE(el.sent_at) as report_date,
-        COUNT(*) as recipient_count
-       FROM email_logs el
-       WHERE ${whereClause} 
-         AND el.status = 'sent'
-         AND el.subject LIKE '%报告%'
-       GROUP BY DATE(el.sent_at), el.subject
-       ORDER BY el.sent_at DESC
-       LIMIT ? OFFSET ?`,
-      [...params, parseInt(limit), offset]
-    );
-
-    // 获取总数
-    const totalResult = await DatabaseService.get(
-      `SELECT COUNT(*) as total 
-       FROM (
-         SELECT DISTINCT DATE(sent_at), subject 
-         FROM email_logs 
-         WHERE ${whereClause} 
-           AND status = 'sent'
-           AND subject LIKE '%报告%'
-       )`,
-      params
-    );
-
-    // 为每个报告获取投资组合信息
-    for (const report of reports) {
-      // 尝试从邮件主题中提取投资组合名称
-      const portfolioMatch = report.subject.match(/「(.+?)」/);
-      if (portfolioMatch) {
-        report.portfolio_name = portfolioMatch[1];
-        
-        // 获取投资组合详细信息
-        const portfolio = await DatabaseService.get(
-          'SELECT id, name, is_public FROM portfolios WHERE name = ?',
-          [report.portfolio_name]
-        );
-        
-        if (portfolio) {
-          report.portfolio_id = portfolio.id;
-          report.is_public = portfolio.is_public;
+      report.email_sent = emailSent.count > 0;
+      
+      // 解析报告数据以获取摘要信息
+      try {
+        if (report.report_data) {
+          const reportData = JSON.parse(report.report_data);
+          report.summary = {
+            totalNews: reportData.totalNews || 0,
+            marketSentiment: reportData.marketSentiment || 0,
+            stockCount: reportData.portfolio ? reportData.portfolio.length : 0,
+            portfolioNewsCount: reportData.portfolioNews ? reportData.portfolioNews.length : 0,
+            type: reportData.type || report.type
+          };
+        } else {
+          report.summary = {
+            totalNews: 0,
+            marketSentiment: 0,
+            stockCount: 0,
+            portfolioNewsCount: 0,
+            type: report.type
+          };
         }
+      } catch (error) {
+        console.warn(`Failed to parse report data for report ${report.id}:`, error);
+        report.summary = {
+          totalNews: 0,
+          marketSentiment: 0,
+          stockCount: 0,
+          portfolioNewsCount: 0,
+          type: report.type
+        };
       }
     }
 
     res.json({
-      reports,
+      reports: result.reports,
       pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total: totalResult.total,
-        pages: Math.ceil(totalResult.total / limit)
+        page: result.page,
+        limit: result.limit,
+        total: result.total,
+        pages: result.pages
       }
     });
   } catch (error) {
     console.error('Get reports error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// 获取特定报告详情
+router.get('/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // 获取报告详情
+    const report = await DatabaseService.get(
+      `SELECT r.*, p.name as portfolio_name
+       FROM reports r
+       LEFT JOIN portfolios p ON r.portfolio_id = p.id
+       WHERE r.id = ? AND r.user_id = ?`,
+      [id, req.user.id]
+    );
+
+    if (!report) {
+      return res.status(404).json({ error: '报告未找到' });
+    }
+
+    // 解析报告数据
+    try {
+      report.report_data = JSON.parse(report.report_data);
+    } catch (error) {
+      console.error('Error parsing report data:', error);
+      report.report_data = {};
+    }
+
+    // 检查是否已发送过邮件
+    const emailLogs = await DatabaseService.all(
+      `SELECT * FROM email_logs 
+       WHERE subject LIKE ? 
+       ORDER BY sent_at DESC`,
+      [`%${report.title}%`]
+    );
+
+    report.email_logs = emailLogs;
+
+    res.json(report);
+  } catch (error) {
+    console.error('Get report error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -163,6 +178,16 @@ router.post('/regenerate', authenticateToken, async (req, res) => {
     // 生成报告
     const reportData = await EmailService.generatePortfolioReport(portfolio_id, date);
 
+    // 保存报告到数据库
+    const reportId = await DatabaseService.saveReport({
+      type: 'portfolio',
+      title: `投资组合报告 - ${portfolio.name}`,
+      portfolioId: parseInt(portfolio_id),
+      userId: req.user.id,
+      data: reportData,
+      status: 'generated'
+    });
+
     // 发送邮件
     let successCount = 0;
     let failCount = 0;
@@ -177,14 +202,77 @@ router.post('/regenerate', authenticateToken, async (req, res) => {
       }
     }
 
+    // 更新报告状态
+    const finalStatus = successCount > 0 ? 'sent' : 'failed';
+    await DatabaseService.run(
+      'UPDATE reports SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [finalStatus, reportId]
+    );
+
     res.json({
       message: 'Report regeneration completed',
       success_count: successCount,
-      fail_count: failCount
+      fail_count: failCount,
+      report_id: reportId
     });
   } catch (error) {
     console.error('Regenerate report error:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// 生成报告（不发送邮件）
+router.post('/generate', authenticateToken, async (req, res) => {
+  try {
+    const { portfolio_id, date, type = 'portfolio' } = req.body;
+
+    if (!portfolio_id) {
+      return res.status(400).json({ error: 'Portfolio ID is required' });
+    }
+
+    // 检查投资组合权限
+    const portfolio = await DatabaseService.get(
+      'SELECT * FROM portfolios WHERE id = ? AND (user_id = ? OR is_public = 1)',
+      [portfolio_id, req.user.id]
+    );
+
+    if (!portfolio) {
+      return res.status(404).json({ error: 'Portfolio not found or access denied' });
+    }
+
+    // 生成报告
+    let reportData;
+    let reportTitle;
+    
+    if (type === 'enhanced-portfolio') {
+      const ReportService = require('../services/ReportService');
+      reportData = await ReportService.generateEnhancedPortfolioReport(portfolio_id, date);
+      reportTitle = `增强投资组合报告 - ${portfolio.name}`;
+    } else {
+      reportData = await EmailService.generatePortfolioReport(portfolio_id, date);
+      reportTitle = `投资组合报告 - ${portfolio.name}`;
+    }
+
+    // 保存报告到数据库
+    const reportId = await DatabaseService.saveReport({
+      type,
+      title: reportTitle,
+      portfolioId: parseInt(portfolio_id),
+      userId: req.user.id,
+      data: reportData,
+      status: 'generated'
+    });
+
+    res.json({
+      message: 'Report generated successfully',
+      report_id: reportId,
+      portfolio_name: portfolio.name,
+      type,
+      data: reportData
+    });
+  } catch (error) {
+    console.error('Generate report error:', error);
+    res.status(500).json({ error: 'Failed to generate report' });
   }
 });
 
@@ -228,6 +316,84 @@ router.get('/stats', authenticateToken, async (req, res) => {
     });
   } catch (error) {
     console.error('Get report stats error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// 测试生成报告（用于调试）
+router.post('/test-generate', authenticateToken, async (req, res) => {
+  try {
+    const { portfolio_id, type = 'portfolio' } = req.body;
+
+    if (!portfolio_id) {
+      return res.status(400).json({ error: 'Portfolio ID is required' });
+    }
+
+    // 检查投资组合权限
+    const portfolio = await DatabaseService.get(
+      'SELECT * FROM portfolios WHERE id = ? AND (user_id = ? OR is_public = 1)',
+      [portfolio_id, req.user.id]
+    );
+
+    if (!portfolio) {
+      return res.status(404).json({ error: 'Portfolio not found or access denied' });
+    }
+
+    console.log(`Testing report generation for portfolio ${portfolio_id}, type: ${type}`);
+
+    // 生成测试报告
+    let reportData;
+    let reportTitle;
+    
+    try {
+      if (type === 'enhanced-portfolio') {
+        const ReportService = require('../services/ReportService');
+        reportData = await ReportService.generateEnhancedPortfolioReport(portfolio_id);
+        reportTitle = `测试增强投资组合报告 - ${portfolio.name}`;
+      } else {
+        reportData = await EmailService.generatePortfolioReport(portfolio_id);
+        reportTitle = `测试投资组合报告 - ${portfolio.name}`;
+      }
+      
+      console.log('Report data generated successfully:', {
+        hasData: !!reportData,
+        dataKeys: Object.keys(reportData || {})
+      });
+
+      // 保存报告到数据库
+      const reportId = await DatabaseService.saveReport({
+        type: `test-${type}`,
+        title: reportTitle,
+        portfolioId: parseInt(portfolio_id),
+        userId: req.user.id,
+        data: reportData,
+        status: 'generated'
+      });
+
+      console.log(`Report saved with ID: ${reportId}`);
+
+      res.json({
+        message: 'Test report generated and saved successfully',
+        report_id: reportId,
+        portfolio_name: portfolio.name,
+        type,
+        has_data: !!reportData,
+        data_preview: reportData ? {
+          date: reportData.date,
+          totalNews: reportData.totalNews,
+          portfolioNews: reportData.portfolioNews?.length,
+          type: reportData.type
+        } : null
+      });
+    } catch (genError) {
+      console.error('Report generation error:', genError);
+      res.status(500).json({ 
+        error: 'Failed to generate report',
+        details: genError.message
+      });
+    }
+  } catch (error) {
+    console.error('Test generate report error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

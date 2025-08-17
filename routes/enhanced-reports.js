@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const EmailService = require('../services/EmailService');
+const DatabaseService = require('../services/DatabaseService');
 const { authenticateToken } = require('./auth');
 const { body, validationResult } = require('express-validator');
 
@@ -28,7 +29,6 @@ router.post('/enhanced-portfolio-report',
       const { portfolioId, emails, date } = req.body;
       
       // 检查投资组合权限
-      const { DatabaseService } = require('../services/DatabaseService');
       const portfolio = await DatabaseService.get(
         'SELECT * FROM portfolios WHERE id = ? AND (user_id = ? OR is_public = 1)',
         [portfolioId, req.user.id]
@@ -39,22 +39,33 @@ router.post('/enhanced-portfolio-report',
       }
 
       const targetDate = date ? new Date(date) : null;
-      const results = await EmailService.sendEnhancedPortfolioReport(
+      const result = await EmailService.sendEnhancedPortfolioReport(
         portfolioId, 
         emails, 
         targetDate
       );
 
-      const successCount = results.filter(r => r.status === 'sent').length;
-      const failedCount = results.filter(r => r.status === 'failed').length;
+      // 保存报告记录到数据库
+      const reportId = await DatabaseService.saveReport({
+        type: 'enhanced-portfolio',
+        title: `增强投资组合报告 - ${portfolio.name}`,
+        portfolioId: parseInt(portfolioId),
+        userId: req.user.id,
+        data: result.reportData || {},
+        status: result.results.some(r => r.status === 'sent') ? 'sent' : 'failed'
+      });
+
+      const successCount = result.results.filter(r => r.status === 'sent').length;
+      const failedCount = result.results.filter(r => r.status === 'failed').length;
 
       res.json({
         message: '增强投资组合报告发送完成',
         total: emails.length,
         sent: successCount,
         failed: failedCount,
-        results,
-        portfolioName: portfolio.name
+        results: result.results,
+        portfolioName: portfolio.name,
+        reportId
       });
     } catch (error) {
       console.error('Send enhanced portfolio report error:', error);
@@ -86,10 +97,22 @@ router.post('/topic-research-report',
 
       const { topic, emails, days = 14 } = req.body;
       
-      const results = await EmailService.sendTopicResearchReport(emails, topic, days);
+      const result = await EmailService.sendTopicResearchReport(emails, topic, days);
 
-      const successCount = results.filter(r => r.status === 'sent').length;
-      const failedCount = results.filter(r => r.status === 'failed').length;
+      // 保存报告记录到数据库
+      const reportId = await DatabaseService.saveReport({
+        type: 'topic-research',
+        title: `主题研究报告 - ${topic}`,
+        portfolioId: null,
+        userId: req.user.id,
+        data: result.reportData || {},
+        topic: topic,
+        days: parseInt(days),
+        status: result.results.some(r => r.status === 'sent') ? 'sent' : 'failed'
+      });
+
+      const successCount = result.results.filter(r => r.status === 'sent').length;
+      const failedCount = result.results.filter(r => r.status === 'failed').length;
 
       res.json({
         message: '主题研究报告发送完成',
@@ -98,7 +121,8 @@ router.post('/topic-research-report',
         total: emails.length,
         sent: successCount,
         failed: failedCount,
-        results
+        results: result.results,
+        reportId
       });
     } catch (error) {
       console.error('Send topic research report error:', error);
@@ -118,7 +142,6 @@ router.get('/enhanced-portfolio-report/:portfolioId/preview',
       const { date } = req.query;
 
       // 检查投资组合权限
-      const { DatabaseService } = require('../services/DatabaseService');
       const portfolio = await DatabaseService.get(
         'SELECT * FROM portfolios WHERE id = ? AND (user_id = ? OR is_public = 1)',
         [portfolioId, req.user.id]
@@ -131,10 +154,21 @@ router.get('/enhanced-portfolio-report/:portfolioId/preview',
       const targetDate = date ? new Date(date) : null;
       const reportData = await EmailService.generateEnhancedPortfolioReport(portfolioId, targetDate);
 
+      // 保存报告记录到数据库
+      const reportId = await DatabaseService.saveReport({
+        type: 'enhanced-portfolio',
+        title: `增强投资组合报告 - ${portfolio.name}`,
+        portfolioId: parseInt(portfolioId),
+        userId: req.user.id,
+        data: reportData,
+        status: 'generated'
+      });
+
       res.json({
         message: '增强投资组合报告生成成功',
         data: reportData,
-        portfolioName: portfolio.name
+        portfolioName: portfolio.name,
+        reportId
       });
     } catch (error) {
       console.error('Generate enhanced portfolio report preview error:', error);
@@ -162,9 +196,22 @@ router.get('/topic-research-report/preview',
 
       const reportData = await EmailService.generateTopicReport(topic, parseInt(days));
 
+      // 保存报告记录到数据库
+      const reportId = await DatabaseService.saveReport({
+        type: 'topic-research',
+        title: `主题研究报告 - ${topic}`,
+        portfolioId: null,
+        userId: req.user.id,
+        data: reportData,
+        topic: topic,
+        days: parseInt(days),
+        status: 'generated'
+      });
+
       res.json({
         message: '主题研究报告生成成功',
-        data: reportData
+        data: reportData,
+        reportId
       });
     } catch (error) {
       console.error('Generate topic research report preview error:', error);
@@ -220,7 +267,6 @@ router.post('/portfolio/:portfolioId/send-enhanced-report',
       const { date } = req.body;
 
       // 检查投资组合权限
-      const { DatabaseService } = require('../services/DatabaseService');
       const portfolio = await DatabaseService.get(
         'SELECT * FROM portfolios WHERE id = ? AND user_id = ?',
         [portfolioId, req.user.id]
@@ -233,10 +279,21 @@ router.post('/portfolio/:portfolioId/send-enhanced-report',
       const targetDate = date ? new Date(date) : null;
       const results = await EmailService.sendEnhancedReportToSubscribers(portfolioId, targetDate);
 
+      // 保存报告记录到数据库
+      const reportId = await DatabaseService.saveReport({
+        type: 'enhanced-portfolio',
+        title: `增强投资组合报告 - ${portfolio.name}`,
+        portfolioId: parseInt(portfolioId),
+        userId: req.user.id,
+        data: results.reportData || {},
+        status: results.sent > 0 ? 'sent' : 'failed'
+      });
+
       res.json({
         message: '增强投资组合报告发送完成',
         portfolioId,
         portfolioName: results.portfolioName,
+        reportId,
         ...results
       });
     } catch (error) {

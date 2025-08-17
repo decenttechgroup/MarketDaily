@@ -116,6 +116,23 @@ class DatabaseService {
         sent_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`,
 
+      // 报告生成记录表
+      `CREATE TABLE IF NOT EXISTS reports (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        portfolio_id INTEGER,
+        user_id INTEGER NOT NULL,
+        report_data TEXT,
+        topic TEXT,
+        days INTEGER,
+        status TEXT DEFAULT 'generated',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (portfolio_id) REFERENCES portfolios (id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users (id)
+      )`,
+
       // 邮件订阅表
       `CREATE TABLE IF NOT EXISTS email_subscriptions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -240,6 +257,74 @@ class DatabaseService {
         }
       });
     });
+  }
+
+  // 保存生成的报告
+  async saveReport(reportData) {
+    const { type, title, portfolioId, userId, data, topic, days, status = 'generated' } = reportData;
+    
+    const result = await this.run(
+      `INSERT INTO reports (type, title, portfolio_id, user_id, report_data, topic, days, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [type, title, portfolioId, userId, JSON.stringify(data), topic, days, status]
+    );
+    
+    return result.lastID;
+  }
+
+  // 获取用户的报告列表
+  async getUserReports(userId, options = {}) {
+    const { page = 1, limit = 20, portfolioId, type, dateFrom, dateTo } = options;
+    const offset = (page - 1) * limit;
+    
+    // 修改查询以包含用户创建的报告和用户有权限访问的投资组合的系统报告
+    let whereClause = '(r.user_id = ? OR (r.user_id IS NULL AND (p.user_id = ? OR p.is_public = 1)))';
+    const params = [userId, userId];
+
+    if (portfolioId && portfolioId !== 'all') {
+      whereClause += ' AND r.portfolio_id = ?';
+      params.push(portfolioId);
+    }
+
+    if (type) {
+      whereClause += ' AND r.type = ?';
+      params.push(type);
+    }
+
+    if (dateFrom) {
+      whereClause += ' AND DATE(r.created_at) >= ?';
+      params.push(dateFrom);
+    }
+
+    if (dateTo) {
+      whereClause += ' AND DATE(r.created_at) <= ?';
+      params.push(dateTo);
+    }
+
+    const reports = await this.all(
+      `SELECT r.*, p.name as portfolio_name
+       FROM reports r
+       LEFT JOIN portfolios p ON r.portfolio_id = p.id
+       WHERE ${whereClause}
+       ORDER BY r.created_at DESC
+       LIMIT ? OFFSET ?`,
+      [...params, parseInt(limit), offset]
+    );
+
+    const total = await this.get(
+      `SELECT COUNT(*) as count FROM reports r
+       LEFT JOIN portfolios p ON r.portfolio_id = p.id
+       WHERE ${whereClause}`,
+      params
+    );
+
+    return {
+      reports,
+      total: total.count,
+      page: parseInt(page),
+      limit: parseInt(limit),
+      pages: Math.ceil(total.count / limit)
+    };
   }
 
   // 关闭数据库连接
