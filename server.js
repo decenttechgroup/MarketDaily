@@ -11,7 +11,6 @@ const configRoutes = require('./routes/config');
 const portfolioRoutes = require('./routes/portfolio');
 const portfoliosRoutes = require('./routes/portfolios');
 const newsRoutes = require('./routes/news');
-const emailRoutes = require('./routes/email');
 const subscriptionsRoutes = require('./routes/subscriptions');
 const industriesRoutes = require('./routes/industries');
 
@@ -45,7 +44,6 @@ app.use('/api/config', industriesRoutes);
 app.use('/api/portfolio', portfolioRoutes);
 app.use('/api/portfolios', portfoliosRoutes);
 app.use('/api/news', newsRoutes);
-app.use('/api/email', emailRoutes);
 app.use('/api/subscriptions', subscriptionsRoutes);
 
 // 健康检查

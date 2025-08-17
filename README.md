@@ -117,10 +117,11 @@ OPENAI_MODEL=gpt-3.5-turbo
 - 设置行业相关关键词
 - 自动筛选行业相关新闻
 
-### 3. 邮件推送
-- 配置邮件接收者列表
-- 自定义发送时间（默认工作日8点）
-- 支持手动发送和测试邮件
+### 3. 邮件订阅
+- 支持综合日报和投资组合专项订阅
+- 批量邮件订阅管理
+- 灵活的订阅状态控制
+- 邮件发送日志监控
 
 ### 4. 新闻管理
 - 实时新闻聚合
@@ -146,11 +147,14 @@ OPENAI_MODEL=gpt-3.5-turbo
 - `GET /api/news/stats/sentiment` - 获取情感统计
 - `POST /api/news/search` - 搜索新闻
 
-### 邮件服务
-- `GET /api/email/recipients` - 获取接收者
-- `POST /api/email/recipients` - 设置接收者
-- `POST /api/email/test` - 发送测试邮件
-- `POST /api/email/send-daily` - 发送日报
+### 订阅管理
+- `GET /api/subscriptions` - 获取订阅列表
+- `POST /api/subscriptions` - 添加订阅
+- `POST /api/subscriptions/batch` - 批量添加订阅
+- `POST /api/subscriptions/unsubscribe` - 取消订阅
+- `GET /api/subscriptions/email/stats` - 获取邮件统计
+- `GET /api/subscriptions/email/logs` - 获取邮件日志
+- `POST /api/subscriptions/email/send-daily` - 发送日报
 
 ## 部署指南
 

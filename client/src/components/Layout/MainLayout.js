@@ -41,11 +41,6 @@ const MainLayout = ({ children }) => {
       label: '新闻资讯'
     },
     {
-      key: '/email',
-      icon: <MailOutlined />,
-      label: '邮件管理'
-    },
-    {
       key: '/settings',
       icon: <SettingOutlined />,
       label: '系统设置'

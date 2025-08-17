@@ -7,7 +7,6 @@ import Dashboard from './components/Dashboard';
 import PortfolioManager from './components/PortfolioManager';
 import SubscriptionManager from './components/SubscriptionManager';
 import News from './components/News';
-import Email from './components/Email';
 import Settings from './components/Settings';
 import MainLayout from './components/Layout/MainLayout';
 
@@ -34,7 +33,6 @@ const App = () => {
         <Route path="/portfolio-manager" element={<PortfolioManager />} />
         <Route path="/subscriptions" element={<SubscriptionManager />} />
         <Route path="/news" element={<News />} />
-        <Route path="/email" element={<Email />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>

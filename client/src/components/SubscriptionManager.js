@@ -65,13 +65,13 @@ const SubscriptionManager = () => {
   // 获取邮件发送统计
   const { data: emailStats } = useQuery(
     'email-stats',
-    () => axios.get('/api/email/stats').then(res => res.data)
+    () => axios.get('/api/subscriptions/email/stats').then(res => res.data)
   );
 
   // 获取邮件发送日志
   const { data: emailLogs = [], isLoading: logsLoading } = useQuery(
     'email-logs',
-    () => axios.get('/api/email/logs', { params: { limit: 50 } }).then(res => res.data.logs)
+    () => axios.get('/api/subscriptions/email/logs', { params: { limit: 50 } }).then(res => res.data.logs)
   );
 
   // 添加订阅
@@ -131,7 +131,7 @@ const SubscriptionManager = () => {
 
   // 发送测试邮件
   const sendTestEmailMutation = useMutation(
-    () => axios.post('/api/email/send-daily'),
+    () => axios.post('/api/subscriptions/email/send-daily'),
     {
       onSuccess: () => {
         message.success('日报发送任务已启动，请查看邮件日志');

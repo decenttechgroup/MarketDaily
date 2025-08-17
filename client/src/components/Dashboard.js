@@ -36,7 +36,7 @@ const Dashboard = () => {
   // 获取邮件统计
   const { data: emailStats, isLoading: emailStatsLoading } = useQuery(
     'email-stats',
-    () => axios.get('/api/email/stats').then(res => res.data)
+    () => axios.get('/api/subscriptions/email/stats').then(res => res.data)
   );
 
   const getSentimentIcon = (sentiment) => {

@@ -1,6 +1,7 @@
 const express = require('express');
 const { authenticateToken } = require('./auth');
 const DatabaseService = require('../services/DatabaseService');
+const EmailService = require('../services/EmailService');
 
 const router = express.Router();
 
@@ -17,6 +18,7 @@ router.get('/', authenticateToken, async (req, res) => {
        FROM email_subscriptions s
        LEFT JOIN portfolios p ON s.portfolio_id = p.id
        LEFT JOIN users u ON p.user_id = u.id
+       WHERE s.is_active = 1
        ORDER BY s.created_at DESC`
     );
 
@@ -153,7 +155,7 @@ router.post('/unsubscribe', async (req, res) => {
     }
 
     const result = await DatabaseService.run(
-      'UPDATE email_subscriptions SET is_active = 0 WHERE email = ? AND portfolio_id = ?',
+      'DELETE FROM email_subscriptions WHERE email = ? AND portfolio_id = ?',
       [email, portfolio_id || null]
     );
 
@@ -195,7 +197,7 @@ router.get('/portfolio/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// 批量导入邮件订阅
+// 批量添加订阅
 router.post('/batch', authenticateToken, async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
@@ -204,30 +206,20 @@ router.post('/batch', authenticateToken, async (req, res) => {
 
     const { emails, portfolio_id } = req.body;
 
-    if (!Array.isArray(emails)) {
-      return res.status(400).json({ error: 'Emails must be an array' });
-    }
-
-    // 验证投资组合
-    if (portfolio_id) {
-      const portfolio = await DatabaseService.get(
-        'SELECT * FROM portfolios WHERE id = ?',
-        [portfolio_id]
-      );
-
-      if (!portfolio) {
-        return res.status(404).json({ error: 'Portfolio not found' });
-      }
+    if (!emails || !Array.isArray(emails)) {
+      return res.status(400).json({ error: 'Emails array required' });
     }
 
     const added = [];
     const errors = [];
 
     for (const email of emails) {
+      if (!email.trim()) continue;
+
       try {
         // 验证邮件格式
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(email)) {
+        if (!emailRegex.test(email.trim())) {
           errors.push({ email, error: 'Invalid email format' });
           continue;
         }
@@ -235,7 +227,7 @@ router.post('/batch', authenticateToken, async (req, res) => {
         // 检查是否已经订阅
         const existing = await DatabaseService.get(
           'SELECT id FROM email_subscriptions WHERE email = ? AND portfolio_id = ?',
-          [email, portfolio_id || null]
+          [email.trim(), portfolio_id || null]
         );
 
         if (existing) {
@@ -243,12 +235,12 @@ router.post('/batch', authenticateToken, async (req, res) => {
           continue;
         }
 
-        const result = await DatabaseService.run(
+        await DatabaseService.run(
           'INSERT INTO email_subscriptions (email, portfolio_id) VALUES (?, ?)',
-          [email, portfolio_id || null]
+          [email.trim(), portfolio_id || null]
         );
 
-        added.push({ email, id: result.id });
+        added.push(email.trim());
       } catch (error) {
         errors.push({ email, error: error.message });
       }
@@ -257,6 +249,130 @@ router.post('/batch', authenticateToken, async (req, res) => {
     res.json({ added, errors });
   } catch (error) {
     console.error('Batch add subscriptions error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// 获取邮件发送统计
+router.get('/email/stats', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    // 总发送统计
+    const totalStats = await DatabaseService.get(
+      `SELECT 
+         COUNT(*) as total,
+         COUNT(CASE WHEN status = 'sent' THEN 1 END) as sent,
+         COUNT(CASE WHEN status = 'failed' THEN 1 END) as failed,
+         COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending
+       FROM email_logs`
+    );
+
+    // 今日统计
+    const today = new Date().toISOString().split('T')[0];
+    const todayStats = await DatabaseService.get(
+      `SELECT 
+         COUNT(CASE WHEN status = 'sent' THEN 1 END) as todaySent,
+         COUNT(CASE WHEN status = 'failed' THEN 1 END) as todayFailed
+       FROM email_logs 
+       WHERE DATE(sent_at) = ?`,
+      [today]
+    );
+
+    // 本周统计
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    const weekStats = await DatabaseService.get(
+      `SELECT COUNT(CASE WHEN status = 'sent' THEN 1 END) as weekSent
+       FROM email_logs 
+       WHERE sent_at > ?`,
+      [weekAgo.toISOString()]
+    );
+
+    // 计算成功率
+    const successRate = totalStats.total > 0 
+      ? Math.round((totalStats.sent / totalStats.total) * 100) 
+      : 0;
+
+    res.json({
+      ...totalStats,
+      ...todayStats,
+      ...weekStats,
+      successRate
+    });
+  } catch (error) {
+    console.error('Get email stats error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// 获取邮件发送记录
+router.get('/email/logs', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const { page = 1, limit = 20, status } = req.query;
+    const offset = (page - 1) * limit;
+
+    let whereClause = '1=1';
+    const params = [];
+
+    if (status && status !== 'all') {
+      whereClause += ' AND status = ?';
+      params.push(status);
+    }
+
+    const logs = await DatabaseService.all(
+      `SELECT * FROM email_logs 
+       WHERE ${whereClause}
+       ORDER BY sent_at DESC 
+       LIMIT ? OFFSET ?`,
+      [...params, parseInt(limit), offset]
+    );
+
+    const totalResult = await DatabaseService.get(
+      `SELECT COUNT(*) as total FROM email_logs WHERE ${whereClause}`,
+      params
+    );
+
+    res.json({
+      logs,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total: totalResult.total,
+        pages: Math.ceil(totalResult.total / limit)
+      }
+    });
+  } catch (error) {
+    console.error('Get email logs error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// 手动发送日报
+router.post('/email/send-daily', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    // 异步发送邮件
+    EmailService.sendDailyReport()
+      .then(() => {
+        console.log('Manual daily report sent');
+      })
+      .catch(error => {
+        console.error('Manual daily report failed:', error);
+      });
+
+    res.json({ message: 'Daily report sending started' });
+  } catch (error) {
+    console.error('Send daily report error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

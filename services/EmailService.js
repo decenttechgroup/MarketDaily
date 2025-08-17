@@ -324,53 +324,7 @@ class EmailService {
     return text;
   }
 
-  async getEmailRecipients() {
-    try {
-      const config = await DatabaseService.all(
-        "SELECT value FROM config WHERE key = 'email_recipients'"
-      );
-      
-      if (config.length > 0) {
-        return JSON.parse(config[0].value);
-      }
-      
-      // 默认发送给管理员
-      return [process.env.ADMIN_EMAIL || 'admin@example.com'];
-    } catch (error) {
-      console.error('Error getting email recipients:', error);
-      return [process.env.ADMIN_EMAIL || 'admin@example.com'];
-    }
-  }
 
-  async testEmail(recipient) {
-    try {
-      if (!this.transporter) {
-        throw new Error('Email transporter not configured');
-      }
-
-      const testData = {
-        date: format(new Date(), 'yyyy-MM-dd'),
-        formattedDate: format(new Date(), 'yyyy年MM月dd日'),
-        totalNews: 1,
-        portfolioNews: [],
-        newsByCategory: {
-          'test': [{
-            title: '这是一封测试邮件',
-            summary: '系统邮件功能测试正常',
-            source: '系统测试',
-            url: '#'
-          }]
-        },
-        marketSentiment: 0,
-        portfolio: []
-      };
-
-      const result = await this.sendEmail(recipient, testData);
-      return { success: true, message: 'Test email sent successfully' };
-    } catch (error) {
-      return { success: false, message: error.message };
-    }
-  }
 
   async generatePortfolioReport(portfolioId, targetDate = null) {
     try {
