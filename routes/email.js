@@ -347,4 +347,134 @@ router.delete('/logs/cleanup', authenticateToken, async (req, res) => {
   }
 });
 
+// 发送投资组合报告给订阅者
+router.post('/send-portfolio-reports', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const { portfolio_ids, date } = req.body;
+    
+    if (!Array.isArray(portfolio_ids) || portfolio_ids.length === 0) {
+      return res.status(400).json({ error: 'Portfolio IDs array is required' });
+    }
+
+    const results = [];
+    const EmailService = require('../services/EmailService');
+    const emailService = new EmailService();
+
+    for (const portfolioId of portfolio_ids) {
+      try {
+        // 获取投资组合信息
+        const portfolio = await DatabaseService.get(
+          'SELECT * FROM portfolios WHERE id = ?',
+          [portfolioId]
+        );
+
+        if (!portfolio) {
+          results.push({ 
+            portfolio_id: portfolioId, 
+            status: 'failed', 
+            error: 'Portfolio not found' 
+          });
+          continue;
+        }
+
+        // 获取该投资组合的订阅者
+        const subscribers = await DatabaseService.all(
+          'SELECT email FROM email_subscriptions WHERE portfolio_id = ? AND is_active = 1',
+          [portfolioId]
+        );
+
+        if (subscribers.length === 0) {
+          results.push({ 
+            portfolio_id: portfolioId, 
+            portfolio_name: portfolio.name,
+            status: 'skipped', 
+            message: 'No active subscribers' 
+          });
+          continue;
+        }
+
+        // 生成报告
+        const reportData = await emailService.generatePortfolioReport(portfolioId, date);
+        
+        // 发送给每个订阅者
+        const emailResults = [];
+        for (const subscriber of subscribers) {
+          try {
+            await emailService.sendPortfolioEmail(subscriber.email, reportData, portfolio.name);
+            emailResults.push({ email: subscriber.email, status: 'sent' });
+          } catch (error) {
+            emailResults.push({ 
+              email: subscriber.email, 
+              status: 'failed', 
+              error: error.message 
+            });
+          }
+        }
+
+        results.push({
+          portfolio_id: portfolioId,
+          portfolio_name: portfolio.name,
+          status: 'completed',
+          total_subscribers: subscribers.length,
+          successful_sends: emailResults.filter(r => r.status === 'sent').length,
+          failed_sends: emailResults.filter(r => r.status === 'failed').length,
+          email_results: emailResults
+        });
+
+      } catch (error) {
+        results.push({
+          portfolio_id: portfolioId,
+          status: 'failed',
+          error: error.message
+        });
+      }
+    }
+
+    res.json({
+      message: 'Portfolio reports sending completed',
+      results
+    });
+
+  } catch (error) {
+    console.error('Send portfolio reports error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// 测试邮件配置
+router.post('/test-config', authenticateToken, async (req, res) => {
+  try {
+    const EmailService = require('../services/EmailService');
+    const emailService = new EmailService();
+
+    if (!emailService.transporter) {
+      return res.status(400).json({ 
+        error: 'Email configuration not found',
+        configured: false
+      });
+    }
+
+    // 验证配置
+    const isValid = await new Promise((resolve) => {
+      emailService.transporter.verify((error, success) => {
+        resolve(!error && success);
+      });
+    });
+
+    res.json({
+      configured: true,
+      valid: isValid,
+      message: isValid ? 'Email configuration is valid' : 'Email configuration validation failed'
+    });
+
+  } catch (error) {
+    console.error('Test email config error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 module.exports = router;

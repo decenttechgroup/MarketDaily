@@ -31,6 +31,11 @@ const MainLayout = ({ children }) => {
       label: '投资组合'
     },
     {
+      key: '/portfolio-manager',
+      icon: <PieChartOutlined />,
+      label: '投资组合管理'
+    },
+    {
       key: '/news',
       icon: <FileTextOutlined />,
       label: '新闻资讯'

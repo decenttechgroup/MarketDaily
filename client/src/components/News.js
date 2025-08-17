@@ -16,7 +16,6 @@ import {
   message
 } from 'antd';
 import {
-  SearchOutlined,
   ReloadOutlined,
   FilterOutlined,
   RiseOutlined,
@@ -331,7 +330,7 @@ const News = () => {
       {/* 高级筛选弹窗 */}
       <Modal
         title="高级筛选"
-        visible={isFilterModalVisible}
+        open={isFilterModalVisible}
         onOk={handleAdvancedSearch}
         onCancel={() => setIsFilterModalVisible(false)}
         confirmLoading={advancedSearchMutation.isLoading}

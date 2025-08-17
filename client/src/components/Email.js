@@ -366,7 +366,7 @@ const Email = () => {
       {/* 添加接收者弹窗 */}
       <Modal
         title="添加邮件接收者"
-        visible={isRecipientModalVisible}
+        open={isRecipientModalVisible}
         onOk={handleAddRecipient}
         onCancel={() => {
           setIsRecipientModalVisible(false);

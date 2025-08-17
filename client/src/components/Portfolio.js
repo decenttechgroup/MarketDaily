@@ -355,7 +355,7 @@ const Portfolio = () => {
       {/* 添加/编辑股票弹窗 */}
       <Modal
         title={editingStock ? '编辑股票' : '添加股票'}
-        visible={isModalVisible}
+        open={isModalVisible}
         onOk={handleModalOk}
         onCancel={handleModalCancel}
         confirmLoading={addStockMutation.isLoading || updateStockMutation.isLoading}

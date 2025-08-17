@@ -308,7 +308,17 @@ class NewsService {
 
   async getPortfolioSymbols() {
     try {
-      return await DatabaseService.all('SELECT symbol, name FROM portfolio');
+      // 获取所有投资组合的股票（包括新旧结构）
+      const newPortfolioStocks = await DatabaseService.all('SELECT symbol, name FROM portfolio_stocks');
+      const oldPortfolioStocks = await DatabaseService.all('SELECT symbol, name FROM portfolio');
+      
+      // 合并去重
+      const allStocks = [...newPortfolioStocks, ...oldPortfolioStocks];
+      const uniqueStocks = allStocks.filter((stock, index, self) => 
+        index === self.findIndex(s => s.symbol === stock.symbol)
+      );
+      
+      return uniqueStocks;
     } catch (error) {
       console.error('Error getting portfolio:', error);
       return [];

@@ -417,7 +417,7 @@ const Settings = () => {
       {/* 行业配置弹窗 */}
       <Modal
         title={editingIndustry ? '编辑行业' : '添加行业'}
-        visible={isIndustryModalVisible}
+        open={isIndustryModalVisible}
         onOk={handleSaveIndustry}
         onCancel={() => {
           setIsIndustryModalVisible(false);
