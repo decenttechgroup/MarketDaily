@@ -12,10 +12,14 @@ import {
   Typography,
   Popconfirm,
   Tag,
-  Switch,
   Tabs,
   List,
-  Divider
+  Divider,
+  Row,
+  Col,
+  DatePicker,
+  Spin,
+  Empty
 } from 'antd';
 import { 
   PlusOutlined, 
@@ -23,10 +27,15 @@ import {
   EditOutlined,
   EyeOutlined,
   SettingOutlined,
-  MailOutlined
+  MailOutlined,
+  BarChartOutlined,
+  SendOutlined,
+  DownloadOutlined,
+  FileTextOutlined
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import axios from 'axios';
+import dayjs from 'dayjs';
 
 const { Title, Text, Paragraph } = Typography;
 const { Option } = Select;
@@ -37,10 +46,16 @@ const PortfolioManager = () => {
   const [selectedPortfolio, setSelectedPortfolio] = useState(null);
   const [isPortfolioModalVisible, setIsPortfolioModalVisible] = useState(false);
   const [isStockModalVisible, setIsStockModalVisible] = useState(false);
+  const [isReportModalVisible, setIsReportModalVisible] = useState(false);
+  const [isSendReportModalVisible, setIsSendReportModalVisible] = useState(false);
+  const [isSubscriptionModalVisible, setIsSubscriptionModalVisible] = useState(false);
   const [editingPortfolio, setEditingPortfolio] = useState(null);
   const [editingStock, setEditingStock] = useState(null);
   const [portfolioForm] = Form.useForm();
   const [stockForm] = Form.useForm();
+  const [sendReportForm] = Form.useForm();
+  const [subscriptionForm] = Form.useForm();
+  const [selectedDate, setSelectedDate] = useState(null);
   const queryClient = useQueryClient();
 
   // 获取投资组合列表
@@ -70,6 +85,13 @@ const PortfolioManager = () => {
     { enabled: !!selectedPortfolio }
   );
 
+  // 获取投资组合历史报告
+  const { data: portfolioReports = [] } = useQuery(
+    ['portfolio-reports', selectedPortfolio?.id],
+    () => selectedPortfolio ? axios.get(`/api/portfolios/${selectedPortfolio.id}/reports`).then(res => res.data) : [],
+    { enabled: !!selectedPortfolio }
+  );
+
   // 创建投资组合
   const createPortfolioMutation = useMutation(
     (data) => axios.post('/api/portfolios', data),
@@ -91,7 +113,7 @@ const PortfolioManager = () => {
     ({ id, data }) => axios.put(`/api/portfolios/${id}`, data),
     {
       onSuccess: () => {
-        queryClient.invalidateQueries('portfolios');
+        queryClient.invalidateQueries('portfolios');                                                                                                                                                                                                                        
         message.success('投资组合更新成功');
         setIsPortfolioModalVisible(false);
         setEditingPortfolio(null);
@@ -150,6 +172,79 @@ const PortfolioManager = () => {
     }
   );
 
+  // 生成投资组合报告
+  const generateReportMutation = useMutation(
+    ({ portfolioId, date }) => axios.get(`/api/portfolios/${portfolioId}/report`, {
+      params: date ? { date: date.format('YYYY-MM-DD') } : {}
+    }),
+    {
+      onSuccess: (response) => {
+        setReportData(response.data);
+        setIsReportModalVisible(true);
+      },
+      onError: (error) => {
+        message.error(error.response?.data?.error || '生成报告失败');
+      }
+    }
+  );
+
+  // 发送投资组合报告
+  const sendReportMutation = useMutation(
+    (data) => axios.post(`/api/portfolios/${selectedPortfolio.id}/send-report`, data),
+    {
+      onSuccess: (response) => {
+        message.success(`报告发送成功！发送至 ${response.data.results.length} 个邮箱`);
+        setIsSendReportModalVisible(false);
+        sendReportForm.resetFields();
+      },
+      onError: (error) => {
+        message.error(error.response?.data?.error || '发送失败');
+      }
+    }
+  );
+
+  // 添加投资组合订阅
+  const addPortfolioSubscriptionMutation = useMutation(
+    (data) => axios.post('/api/subscriptions', {
+      ...data,
+      portfolio_id: selectedPortfolio.id
+    }),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(['portfolio-subscriptions', selectedPortfolio?.id]);
+        message.success('邮件订阅添加成功');
+        setIsSubscriptionModalVisible(false);
+        subscriptionForm.resetFields();
+      },
+      onError: (error) => {
+        if (error.response?.data?.error === 'Already subscribed') {
+          message.warning('该邮箱已经订阅过该投资组合');
+        } else {
+          message.error(error.response?.data?.error || '添加失败');
+        }
+      }
+    }
+  );
+
+  // 删除投资组合订阅
+  const deletePortfolioSubscriptionMutation = useMutation(
+    ({ email }) => axios.post('/api/subscriptions/unsubscribe', {
+      email, 
+      portfolio_id: selectedPortfolio.id
+    }),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(['portfolio-subscriptions', selectedPortfolio?.id]);
+        message.success('订阅删除成功');
+      },
+      onError: (error) => {
+        message.error(error.response?.data?.error || '删除失败');
+      }
+    }
+  );
+
+  const [reportData, setReportData] = useState(null);
+
   const handleCreatePortfolio = () => {
     setEditingPortfolio(null);
     setIsPortfolioModalVisible(true);
@@ -192,6 +287,36 @@ const PortfolioManager = () => {
     });
   };
 
+  const handleGenerateReport = () => {
+    if (!selectedPortfolio) {
+      message.warning('请先选择一个投资组合');
+      return;
+    }
+    generateReportMutation.mutate({ 
+      portfolioId: selectedPortfolio.id, 
+      date: selectedDate 
+    });
+  };
+
+  const handleSendReport = () => {
+    if (!selectedPortfolio) {
+      message.warning('请先选择一个投资组合');
+      return;
+    }
+    setIsSendReportModalVisible(true);
+    sendReportForm.resetFields();
+  };
+
+  const handleSendReportOk = () => {
+    sendReportForm.validateFields().then((values) => {
+      const emails = values.emails.split('\n').map(email => email.trim()).filter(email => email);
+      sendReportMutation.mutate({
+        emails,
+        date: values.date ? values.date.format('YYYY-MM-DD') : null
+      });
+    });
+  };
+
   const portfolioColumns = [
     {
       title: '投资组合名称',
@@ -199,7 +324,16 @@ const PortfolioManager = () => {
       key: 'name',
       render: (name, record) => (
         <Space>
-          <strong>{name}</strong>
+          <Button
+            type="link"
+            style={{ padding: 0, height: 'auto', fontWeight: 'bold' }}
+            onClick={() => {
+              setSelectedPortfolio(record);
+              setTimeout(() => setActiveTab('details'), 0);
+            }}
+          >
+            {name}
+          </Button>
           {record.is_public && <Tag color="green">公开</Tag>}
         </Space>
       )
@@ -348,9 +482,9 @@ const PortfolioManager = () => {
   return (
     <div>
       <div className="page-header">
-        <Title level={2} className="page-title">投资组合管理</Title>
+        <Title level={2} className="page-title">增强投资组合管理</Title>
         <Text className="page-description">
-          创建和管理多个投资组合，订阅个性化市场报告
+          创建和管理多个投资组合，生成个性化报告，管理邮件订阅
         </Text>
       </div>
 
@@ -400,6 +534,19 @@ const PortfolioManager = () => {
                   extra={
                     <Space>
                       <Button
+                        icon={<BarChartOutlined />}
+                        onClick={handleGenerateReport}
+                        loading={generateReportMutation.isLoading}
+                      >
+                        生成报告
+                      </Button>
+                      <Button
+                        icon={<SendOutlined />}
+                        onClick={handleSendReport}
+                      >
+                        发送报告
+                      </Button>
+                      <Button
                         icon={<MailOutlined />}
                         onClick={() => setActiveTab('subscriptions')}
                       >
@@ -418,6 +565,39 @@ const PortfolioManager = () => {
                   {selectedPortfolio.description && (
                     <Paragraph>{selectedPortfolio.description}</Paragraph>
                   )}
+                  
+                  <Row gutter={[16, 16]}>
+                    <Col span={8}>
+                      <Card size="small">
+                        <div style={{ textAlign: 'center' }}>
+                          <Title level={3} style={{ margin: 0, color: '#1890ff' }}>
+                            {portfolioStocks.length}
+                          </Title>
+                          <Text type="secondary">股票数量</Text>
+                        </div>
+                      </Card>
+                    </Col>
+                    <Col span={8}>
+                      <Card size="small">
+                        <div style={{ textAlign: 'center' }}>
+                          <Title level={3} style={{ margin: 0, color: '#52c41a' }}>
+                            {portfolioNews.length}
+                          </Title>
+                          <Text type="secondary">相关新闻</Text>
+                        </div>
+                      </Card>
+                    </Col>
+                    <Col span={8}>
+                      <Card size="small">
+                        <div style={{ textAlign: 'center' }}>
+                          <Title level={3} style={{ margin: 0, color: '#722ed1' }}>
+                            {portfolioSubscriptions.length}
+                          </Title>
+                          <Text type="secondary">订阅用户</Text>
+                        </div>
+                      </Card>
+                    </Col>
+                  </Row>
                   
                   <Divider orientation="left">股票列表 ({portfolioStocks.length})</Divider>
                   <Table
@@ -443,6 +623,66 @@ const PortfolioManager = () => {
                   )}
                 </Card>
               </Space>
+            )
+          },
+          {
+            key: 'reports',
+            label: '报告管理',
+            disabled: !selectedPortfolio,
+            children: selectedPortfolio && (
+              <Card 
+                title={`${selectedPortfolio.name} - 报告管理`}
+                extra={
+                  <Space>
+                    <DatePicker
+                      placeholder="选择日期"
+                      value={selectedDate}
+                      onChange={setSelectedDate}
+                      style={{ width: 150 }}
+                    />
+                    <Button
+                      type="primary"
+                      icon={<BarChartOutlined />}
+                      onClick={handleGenerateReport}
+                      loading={generateReportMutation.isLoading}
+                    >
+                      生成报告
+                    </Button>
+                  </Space>
+                }
+              >
+                <Space direction="vertical" style={{ width: '100%' }} size="middle">
+                  {portfolioReports.length > 0 ? (
+                    <List
+                      dataSource={portfolioReports}
+                      renderItem={(report) => (
+                        <List.Item
+                          actions={[
+                            <Button 
+                              icon={<EyeOutlined />}
+                              onClick={() => generateReportMutation.mutate({ 
+                                portfolioId: selectedPortfolio.id, 
+                                date: dayjs(report.report_date) 
+                              })}
+                            >
+                              查看
+                            </Button>,
+                            <Button icon={<DownloadOutlined />}>下载</Button>
+                          ]}
+                        >
+                          <List.Item.Meta
+                            avatar={<FileTextOutlined style={{ fontSize: '24px', color: '#1890ff' }} />}
+                            title={`${report.report_date} 报告`}
+                            description={`发送给 ${report.email_count} 个邮箱：${report.recipients?.split(',').slice(0, 3).join(', ')}${report.recipients?.split(',').length > 3 ? '...' : ''}`}
+                          />
+                        </List.Item>
+                      )}
+                    />
+                  ) : (
+                    <Empty description="暂无历史报告" />
+                  )}
+                </Space>
+              </Card>
             )
           },
           {
@@ -511,7 +751,10 @@ const PortfolioManager = () => {
             label="是否公开"
             valuePropName="checked"
           >
-            <Switch checkedChildren="公开" unCheckedChildren="私有" />
+            <Select placeholder="选择可见性">
+              <Option value={true}>公开 - 其他用户可以订阅</Option>
+              <Option value={false}>私有 - 仅自己可见</Option>
+            </Select>
           </Form.Item>
         </Form>
       </Modal>
@@ -568,6 +811,137 @@ const PortfolioManager = () => {
             </Select>
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* 发送报告弹窗 */}
+      <Modal
+        title="发送投资组合报告"
+        open={isSendReportModalVisible}
+        onOk={handleSendReportOk}
+        onCancel={() => {
+          setIsSendReportModalVisible(false);
+          sendReportForm.resetFields();
+        }}
+        confirmLoading={sendReportMutation.isLoading}
+        width={600}
+      >
+        <Form
+          form={sendReportForm}
+          layout="vertical"
+        >
+          <Form.Item
+            name="emails"
+            label="邮件地址"
+            rules={[{ required: true, message: '请输入邮件地址' }]}
+            help="每行输入一个邮件地址"
+          >
+            <TextArea
+              placeholder={`user1@example.com
+user2@example.com
+user3@example.com`}
+              rows={6}
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="date"
+            label="报告日期"
+            help="不选择则生成当日报告"
+          >
+            <DatePicker style={{ width: '100%' }} />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 报告预览弹窗 */}
+      <Modal
+        title="投资组合报告预览"
+        open={isReportModalVisible}
+        onCancel={() => setIsReportModalVisible(false)}
+        footer={[
+          <Button key="close" onClick={() => setIsReportModalVisible(false)}>
+            关闭
+          </Button>,
+          <Button key="send" type="primary" onClick={handleSendReport}>
+            发送报告
+          </Button>
+        ]}
+        width={800}
+      >
+        {reportData && (
+          <div>
+            <Space direction="vertical" style={{ width: '100%' }} size="middle">
+              <Card size="small">
+                <Row gutter={16}>
+                  <Col span={6}>
+                    <div style={{ textAlign: 'center' }}>
+                      <Title level={4} style={{ margin: 0, color: '#1890ff' }}>
+                        {reportData.portfolio?.stockCount || 0}
+                      </Title>
+                      <Text type="secondary">股票数量</Text>
+                    </div>
+                  </Col>
+                  <Col span={6}>
+                    <div style={{ textAlign: 'center' }}>
+                      <Title level={4} style={{ margin: 0, color: '#52c41a' }}>
+                        {reportData.totalNews || 0}
+                      </Title>
+                      <Text type="secondary">相关新闻</Text>
+                    </div>
+                  </Col>
+                  <Col span={6}>
+                    <div style={{ textAlign: 'center' }}>
+                      <Title level={4} style={{ margin: 0, color: '#722ed1' }}>
+                        {reportData.marketSentiment?.toFixed(2) || 0}
+                      </Title>
+                      <Text type="secondary">市场情绪</Text>
+                    </div>
+                  </Col>
+                  <Col span={6}>
+                    <div style={{ textAlign: 'center' }}>
+                      <Title level={4} style={{ margin: 0, color: '#fa8c16' }}>
+                        {reportData.metrics?.weeklyNewsCount || 0}
+                      </Title>
+                      <Text type="secondary">周新闻数</Text>
+                    </div>
+                  </Col>
+                </Row>
+              </Card>
+
+              <Card title="投资组合股票" size="small">
+                {reportData.portfolio?.stocks?.length > 0 ? (
+                  <Space wrap>
+                    {reportData.portfolio.stocks.map(stock => (
+                      <Tag key={stock.symbol} color="blue">
+                        {stock.symbol} - {stock.name}
+                      </Tag>
+                    ))}
+                  </Space>
+                ) : (
+                  <Text type="secondary">投资组合为空</Text>
+                )}
+              </Card>
+
+              <Card title="相关新闻摘要" size="small">
+                {reportData.portfolioNews?.length > 0 ? (
+                  <List
+                    dataSource={reportData.portfolioNews.slice(0, 3)}
+                    renderItem={(news) => (
+                      <List.Item>
+                        <List.Item.Meta
+                          title={<a href={news.url} target="_blank" rel="noopener noreferrer">{news.title}</a>}
+                          description={`${news.source} - ${news.summary?.substring(0, 100)}...`}
+                        />
+                      </List.Item>
+                    )}
+                  />
+                ) : (
+                  <Text type="secondary">暂无相关新闻</Text>
+                )}
+              </Card>
+            </Space>
+          </div>
+        )}
       </Modal>
     </div>
   );

@@ -26,14 +26,14 @@ const MainLayout = ({ children }) => {
       label: '仪表板'
     },
     {
-      key: '/portfolio',
-      icon: <PieChartOutlined />,
-      label: '投资组合'
-    },
-    {
       key: '/portfolio-manager',
       icon: <PieChartOutlined />,
       label: '投资组合管理'
+    },
+    {
+      key: '/subscriptions',
+      icon: <MailOutlined />,
+      label: '订阅管理'
     },
     {
       key: '/news',
