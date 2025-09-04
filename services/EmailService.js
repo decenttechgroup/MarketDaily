@@ -81,7 +81,7 @@ class EmailService {
             type: reportType,
             title: reportTitle,
             portfolioId: parseInt(portfolioId),
-            userId: null, // 系统生成的报告
+            userId: '1', // 系统生成的报告
             data: reportData,
             status: 'generated'
           });
@@ -114,13 +114,15 @@ class EmailService {
       if (generalSubscriptions.length > 0) {
         try {
           const reportData = await ReportService.generateGeneralReport();
+          console.log('reportData');
+          console.log(reportData);
           
           // 保存通用报告到数据库
           const reportId = await DatabaseService.saveReport({
             type: 'general',
             title: '综合市场报告',
             portfolioId: null,
-            userId: null, // 系统生成的报告
+            userId: '1', // 系统生成的报告
             data: reportData,
             status: 'generated'
           });

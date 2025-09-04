@@ -154,10 +154,17 @@ router.post('/unsubscribe', async (req, res) => {
       return res.status(400).json({ error: 'Email required' });
     }
 
-    const result = await DatabaseService.run(
-      'DELETE FROM email_subscriptions WHERE email = ? AND portfolio_id = ?',
-      [email, portfolio_id || null]
-    );
+    let query = 'DELETE FROM email_subscriptions WHERE email = ?';
+    let params = [email];
+
+    if (portfolio_id === null) {
+      query += ' AND portfolio_id IS NULL';
+    } else {
+      query += ' AND portfolio_id = ?';
+      params.push(portfolio_id);
+    }
+
+    const result = await DatabaseService.run(query, params);
 
     if (result.changes === 0) {
       return res.status(404).json({ error: 'Subscription not found' });
@@ -292,8 +299,8 @@ router.get('/email/stats', authenticateToken, async (req, res) => {
     );
 
     // 计算成功率
-    const successRate = totalStats.total > 0 
-      ? Math.round((totalStats.sent / totalStats.total) * 100) 
+    const successRate = totalStats.total > 0
+      ? Math.round((totalStats.sent / totalStats.total) * 100)
       : 0;
 
     res.json({

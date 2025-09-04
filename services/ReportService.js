@@ -148,15 +148,36 @@ class ReportService {
           [startDate.toISOString(), endDate.toISOString()]
         );
       } else {
-        // 获取最新新闻
-        recentNews = await NewsService.getRecentNews(30);
+        // 获取更多新闻以确保有足够的相关新闻
+        recentNews = await NewsService.getRecentNews(100);
       }
       
       // 过滤投资组合相关新闻
-      const portfolioNews = recentNews.filter(news => {
+      let portfolioNews = recentNews.filter(news => {
         const newsSymbols = JSON.parse(news.symbols || '[]');
         return newsSymbols.some(symbol => symbols.includes(symbol));
       });
+      
+      // 如果相关新闻太少，直接查询有股票符号的新闻作为补充
+      if (portfolioNews.length < 3) {
+        const additionalNews = await DatabaseService.all(
+          `SELECT * FROM news 
+           WHERE symbols != '[]' AND symbols IS NOT NULL 
+           ORDER BY created_at DESC 
+           LIMIT 20`
+        );
+        
+        // 过滤出与投资组合相关的新闻
+        const relevantAdditional = additionalNews.filter(news => {
+          const newsSymbols = JSON.parse(news.symbols || '[]');
+          return newsSymbols.some(symbol => symbols.includes(symbol));
+        });
+        
+        // 合并新闻，去重
+        const existingUrls = new Set(portfolioNews.map(news => news.url));
+        const newNews = relevantAdditional.filter(news => !existingUrls.has(news.url));
+        portfolioNews = [...portfolioNews, ...newNews].slice(0, 10);
+      }
 
       // 按分类组织新闻
       const newsByCategory = {};
@@ -254,11 +275,44 @@ class ReportService {
       // 热门话题分析
       const trendingTopics = await this.analyzeTrendingTopics(recentNews);
 
+      // 获取所有投资组合的相关新闻（用于通用报告）
+      const allPortfolioStocks = await DatabaseService.all(
+        'SELECT DISTINCT symbol, name FROM portfolio_stocks'
+      );
+      
+      const allSymbols = allPortfolioStocks.map(stock => stock.symbol);
+      
+      // 过滤出与所有投资组合相关的新闻
+      const portfolioNews = recentNews.filter(news => {
+        const newsSymbols = JSON.parse(news.symbols || '[]');
+        return newsSymbols.some(symbol => allSymbols.includes(symbol));
+      });
+      
+      // 如果相关新闻太少，补充查询
+      let finalPortfolioNews = portfolioNews;
+      if (portfolioNews.length < 3) {
+        const additionalNews = await DatabaseService.all(
+          `SELECT * FROM news 
+           WHERE symbols != '[]' AND symbols IS NOT NULL 
+           ORDER BY created_at DESC 
+           LIMIT 20`
+        );
+        
+        const relevantAdditional = additionalNews.filter(news => {
+          const newsSymbols = JSON.parse(news.symbols || '[]');
+          return newsSymbols.some(symbol => allSymbols.includes(symbol));
+        });
+        
+        const existingUrls = new Set(portfolioNews.map(news => news.url));
+        const newNews = relevantAdditional.filter(news => !existingUrls.has(news.url));
+        finalPortfolioNews = [...portfolioNews, ...newNews].slice(0, 8);
+      }
+
       return {
         date: format(reportDate, 'yyyy-MM-dd'),
         formattedDate: format(reportDate, 'yyyy年MM月dd日'),
         totalNews: recentNews.length,
-        portfolioNews: [],
+        portfolioNews: finalPortfolioNews,
         newsByCategory,
         marketSentiment: avgSentiment,
         portfolio: publicPortfolios,
@@ -322,7 +376,13 @@ class ReportService {
         }
       );
 
-      const result = JSON.parse(response.choices[0].message.content);
+      // 清理 OpenAI 返回的 markdown 格式
+      let content = response.choices[0].message.content;
+      
+      // 移除可能的 markdown 代码块标记
+      content = content.replace(/```json\s*/g, '').replace(/```\s*$/g, '').trim();
+      
+      const result = JSON.parse(content);
       return result;
     } catch (error) {
       console.error('Error generating AI analysis:', error);
@@ -414,7 +474,13 @@ class ReportService {
         }
       );
 
-      const result = JSON.parse(response.choices[0].message.content);
+      // 清理 OpenAI 返回的 markdown 格式
+      let content = response.choices[0].message.content;
+      
+      // 移除可能的 markdown 代码块标记
+      content = content.replace(/```json\s*/g, '').replace(/```\s*$/g, '').trim();
+      
+      const result = JSON.parse(content);
       return result;
     } catch (error) {
       console.error('Error generating portfolio recommendations:', error);
@@ -877,7 +943,13 @@ class ReportService {
         }
       );
 
-      const result = JSON.parse(response.choices[0].message.content);
+      // 清理 OpenAI 返回的 markdown 格式
+      let content = response.choices[0].message.content;
+      
+      // 移除可能的 markdown 代码块标记
+      content = content.replace(/```json\s*/g, '').replace(/```\s*$/g, '').trim();
+      
+      const result = JSON.parse(content);
       return result;
     } catch (error) {
       console.error('Error analyzing external news:', error);
@@ -1078,7 +1150,13 @@ class ReportService {
         }
       );
 
-      const result = JSON.parse(response.choices[0].message.content);
+      // 清理 OpenAI 返回的 markdown 格式
+      let content = response.choices[0].message.content;
+      
+      // 移除可能的 markdown 代码块标记
+      content = content.replace(/```json\s*/g, '').replace(/```\s*$/g, '').trim();
+      
+      const result = JSON.parse(content);
       return result;
     } catch (error) {
       console.error('Error generating enhanced AI analysis:', error);
@@ -1205,7 +1283,13 @@ class ReportService {
         }
       );
 
-      const result = JSON.parse(response.choices[0].message.content);
+      // 清理 OpenAI 返回的 markdown 格式
+      let content = response.choices[0].message.content;
+      
+      // 移除可能的 markdown 代码块标记
+      content = content.replace(/```json\s*/g, '').replace(/```\s*$/g, '').trim();
+      
+      const result = JSON.parse(content);
       return result;
     } catch (error) {
       console.error('Error generating topic deep analysis:', error);

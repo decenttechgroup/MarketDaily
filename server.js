@@ -25,10 +25,51 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // 信任代理（解决 X-Forwarded-For 头部问题）
-app.set('trust proxy', true);
+// 只信任第一层代理，更安全的配置
+// 选项说明:
+// - false: 不信任任何代理 (最安全，但可能无法获取真实IP)
+// - true: 信任所有代理 (不安全，可被绕过)
+// - 1: 只信任第一层代理 (推荐，适合大多数部署场景)
+// - 'loopback': 只信任回环地址
+// - ['127.0.0.1', '::1']: 只信任特定IP列表
+app.set('trust proxy', 1);
 
 // 中间件
-app.use(helmet());
+const isStrictSecurity = process.env.ENABLE_STRICT_SECURE_HEADERS === 'true';
+
+// 开发 / 仅HTTP / 用IP访问：关闭HSTS + 去掉 upgrade-insecure-requests + 放宽COOP
+if (!isStrictSecurity) {
+  app.use(helmet({
+    hsts: false,
+    // 仅在需要时开启 CSP；这里显式设置且去掉 upgrade-insecure-requests
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        // 不要自动把 http 子资源升级为 https
+        upgradeInsecureRequests: null,
+        // 其余按需收紧（示例保持默认，或像你之前那样 'self'）
+        // 可以加入你需要的 img-src、style-src 等细化策略
+      }
+    },
+    // 避免在非“可信来源”（HTTP/IP）下触发 COOP 警告
+    crossOriginOpenerPolicy: { policy: 'unsafe-none' },
+    // 其他 helmet 子中间件保持默认
+  }));
+} else {
+  // 生产 + HTTPS + 有证书：打开严格安全头
+  app.use(helmet({
+    hsts: { maxAge: 15552000, includeSubDomains: true, preload: false },
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        // 在 HTTPS 场景下才加自动升级
+        upgradeInsecureRequests: [],
+      }
+    },
+    crossOriginOpenerPolicy: { policy: 'same-origin' },
+  }));
+}
+
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -36,7 +77,13 @@ app.use(express.urlencoded({ extended: true }));
 // 速率限制
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15分钟
-  max: 100 // 每个IP最多100次请求
+  max: 1000, // 每个IP最多100次请求
+  standardHeaders: true, // 在 `RateLimit-*` 头部返回速率限制信息
+  legacyHeaders: false, // 禁用 `X-RateLimit-*` 头部
+  // 确保在代理环境下正确识别IP
+  keyGenerator: (req) => {
+    return req.ip;
+  }
 });
 app.use('/api/', limiter);
 

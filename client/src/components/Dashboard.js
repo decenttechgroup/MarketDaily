@@ -1,5 +1,5 @@
-import React from 'react';
-import { Card, Row, Col, Statistic, List, Typography, Alert, Spin } from 'antd';
+import React, { useState } from 'react';
+import { Card, Row, Col, Statistic, List, Typography, Alert, Spin, Pagination } from 'antd';
 import { useQuery } from 'react-query';
 import {
   RiseOutlined,
@@ -14,11 +14,19 @@ import dayjs from 'dayjs';
 const { Title, Text } = Typography;
 
 const Dashboard = () => {
+  // 分页状态
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 20;
+  const maxTotal = 200; // 最大显示200条新闻
+  
   // 获取新闻数据
   const { data: newsData, isLoading: newsLoading } = useQuery(
-    'recent-news',
-    () => axios.get('/api/news?limit=5').then(res => res.data),
-    { refetchInterval: 300000 } // 每5分钟刷新
+    ['recent-news', currentPage],
+    () => axios.get(`/api/news?page=${currentPage}&limit=${pageSize}`).then(res => res.data),
+    { 
+      refetchInterval: 300000, // 每5分钟刷新
+      keepPreviousData: true // 保持上一页数据，避免跳页时闪烁
+    }
   );
 
   // 获取投资组合统计
@@ -90,8 +98,9 @@ const Dashboard = () => {
         <Col xs={24} sm={12} lg={6}>
           <Card>
             <Statistic
-              title="今日新闻"
-              value={newsData?.news?.length || 0}
+              title="新闻总数"
+              value={Math.min(newsData?.pagination?.total || 0, maxTotal)}
+              suffix={`/ ${maxTotal}`}
               prefix={<FileTextOutlined />}
               valueStyle={{ color: '#52c41a' }}
             />
@@ -128,52 +137,83 @@ const Dashboard = () => {
       <Row gutter={[24, 24]}>
         {/* 最新新闻 */}
         <Col xs={24} lg={16}>
-          <Card title="最新资讯" extra={<Text type="secondary">最近更新</Text>}>
+          <Card 
+            title={
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>最新资讯</span>
+                <Text type="secondary">
+                  第 {currentPage} 页，共 {Math.min(Math.ceil((newsData?.pagination?.total || 0) / pageSize), Math.ceil(maxTotal / pageSize))} 页
+                </Text>
+              </div>
+            }
+          >
             {newsData?.news?.length > 0 ? (
-              <List
-                itemLayout="vertical"
-                dataSource={newsData.news}
-                renderItem={(item) => (
-                  <List.Item key={item.id}>
-                    <div className="news-item">
-                      <a
-                        href={item.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="news-title"
-                      >
-                        {item.title}
-                      </a>
-                      
-                      <div className="news-meta">
-                        <span>来源：{item.source}</span>
-                        <span>时间：{dayjs(item.created_at).format('MM-DD HH:mm')}</span>
-                        {item.sentiment !== null && (
-                          <span className={`sentiment-${getSentimentText(item.sentiment)}`}>
-                            {getSentimentIcon(item.sentiment)} {getSentimentText(item.sentiment)}
-                          </span>
+              <>
+                <List
+                  itemLayout="vertical"
+                  dataSource={newsData.news}
+                  renderItem={(item) => (
+                    <List.Item key={item.id}>
+                      <div className="news-item">
+                        <a
+                          href={item.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="news-title"
+                        >
+                          {item.title}
+                        </a>
+                        
+                        <div className="news-meta">
+                          <span>来源：{item.source}</span>
+                          <span>时间：{dayjs(item.created_at).format('MM-DD HH:mm')}</span>
+                          {item.sentiment !== null && (
+                            <span className={`sentiment-${getSentimentText(item.sentiment)}`}>
+                              {getSentimentIcon(item.sentiment)} {getSentimentText(item.sentiment)}
+                            </span>
+                          )}
+                        </div>
+                        
+                        {item.summary && (
+                          <div className="news-summary">
+                            {item.summary}
+                          </div>
+                        )}
+                        
+                        {item.symbols && JSON.parse(item.symbols).length > 0 && (
+                          <div className="news-tags">
+                            {JSON.parse(item.symbols).map(symbol => (
+                              <span key={symbol} className="portfolio-stock">
+                                {symbol}
+                              </span>
+                            ))}
+                          </div>
                         )}
                       </div>
-                      
-                      {item.summary && (
-                        <div className="news-summary">
-                          {item.summary}
-                        </div>
-                      )}
-                      
-                      {item.symbols && JSON.parse(item.symbols).length > 0 && (
-                        <div className="news-tags">
-                          {JSON.parse(item.symbols).map(symbol => (
-                            <span key={symbol} className="portfolio-stock">
-                              {symbol}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </List.Item>
-                )}
-              />
+                    </List.Item>
+                  )}
+                />
+                
+                {/* 分页控件 */}
+                <div style={{ textAlign: 'center', marginTop: '24px', paddingTop: '16px', borderTop: '1px solid #f0f0f0' }}>
+                  <Pagination
+                    current={currentPage}
+                    total={Math.min(newsData?.pagination?.total || 0, maxTotal)}
+                    pageSize={pageSize}
+                    showTotal={(total, range) =>
+                      `显示 ${range[0]}-${range[1]} 条，共 ${total} 条新闻`
+                    }
+                    showQuickJumper
+                    showSizeChanger={false}
+                    onChange={(page) => {
+                      setCurrentPage(page);
+                      // 滚动到页面顶部
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    size="default"
+                  />
+                </div>
+              </>
             ) : (
               <div className="empty-state">
                 <FileTextOutlined style={{ fontSize: '48px', color: '#d9d9d9', marginBottom: '16px' }} />
